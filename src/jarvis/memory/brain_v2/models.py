@@ -234,4 +234,3 @@ def empty_projects_document() -> Dict[str, Any]:
         "active_project_id": None,
         "items": {},
     }
-
