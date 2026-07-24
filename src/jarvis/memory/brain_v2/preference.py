@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional, Sequence
 from .models import (
     PreferenceMemoryRecord,
     empty_preferences_document,
+    is_forbidden_preference_key,
     normalize_preference_key,
     utc_now_iso,
 )
@@ -70,6 +71,8 @@ class PreferenceMemory:
         try:
             k = normalize_preference_key(key)
         except ValueError:
+            return None
+        if is_forbidden_preference_key(k):
             return None
         now = utc_now_iso()
         existing = self.get(k)

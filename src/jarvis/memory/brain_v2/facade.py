@@ -75,23 +75,22 @@ def _durable_pref_proj(root: Path) -> tuple[PreferenceMemory, ProjectMemory, boo
         backups = safe_backups_dir(root)
         pref_path = safe_store_path(root, "preferences.json")
         proj_path = safe_store_path(root, "projects.json")
-        pref = PreferenceMemory(
-            BrainV2JsonStore(
-                pref_path,
-                empty_factory=empty_preferences_document,
-                backups_dir=backups,
-                writable=True,
-            )
+        pref_store = BrainV2JsonStore(
+            pref_path,
+            empty_factory=empty_preferences_document,
+            backups_dir=backups,
+            writable=True,
         )
-        proj = ProjectMemory(
-            BrainV2JsonStore(
-                proj_path,
-                empty_factory=empty_projects_document,
-                backups_dir=backups,
-                writable=True,
-            )
+        proj_store = BrainV2JsonStore(
+            proj_path,
+            empty_factory=empty_projects_document,
+            backups_dir=backups,
+            writable=True,
         )
-        return pref, proj, True
+        pref = PreferenceMemory(pref_store)
+        proj = ProjectMemory(proj_store)
+        ok = bool(pref_store.writable and proj_store.writable)
+        return pref, proj, ok
     except Exception:  # noqa: BLE001 — fail-safe for daemon safety
         pref, proj = _memory_only_pref_proj()
         return pref, proj, False

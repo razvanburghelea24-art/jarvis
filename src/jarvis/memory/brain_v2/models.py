@@ -67,6 +67,27 @@ def normalize_preference_key(key: Any) -> str:
     return _normalize_key(key)
 
 
+_FORBIDDEN_PREF_KEY_MARKERS = (
+    "password",
+    "passwd",
+    "api_key",
+    "apikey",
+    "access_token",
+    "refresh_token",
+    "private_key",
+    "secret",
+    "cookie",
+    "authorization",
+    "bearer",
+)
+
+
+def is_forbidden_preference_key(key: str) -> bool:
+    """Return True when a preference key looks like a secret/auth slot."""
+    lowered = str(key or "").strip().lower().replace("-", "_")
+    return any(marker in lowered for marker in _FORBIDDEN_PREF_KEY_MARKERS)
+
+
 def normalize_project_id(project_id: Any) -> str:
     return _normalize_key(project_id)
 
@@ -112,7 +133,7 @@ class PreferenceMemoryRecord:
             ver = int(raw.get("schema_version", PREFERENCE_SCHEMA_VERSION))
         except (TypeError, ValueError):
             ver = PREFERENCE_SCHEMA_VERSION
-        if ver < 1:
+        if ver < 1 or ver > PREFERENCE_SCHEMA_VERSION:
             ver = PREFERENCE_SCHEMA_VERSION
         # Unknown keys intentionally ignored (forward-compatible).
         return cls(
@@ -202,8 +223,24 @@ class ProjectMemoryRecord:
             ver = int(raw.get("schema_version", PROJECT_SCHEMA_VERSION))
         except (TypeError, ValueError):
             ver = PROJECT_SCHEMA_VERSION
-        if ver < 1:
+        if ver < 1 or ver > PROJECT_SCHEMA_VERSION:
             ver = PROJECT_SCHEMA_VERSION
+        # Clamp metadata on load so RAM cannot retain oversized blobs.
+        if metadata:
+            probe = ProjectMemoryRecord(
+                project_id=pid,
+                name=name,
+                status=status,
+                summary=summary,
+                active_goal=active_goal,
+                last_action=last_action,
+                next_action=next_action,
+                metadata=metadata,
+                created_at=created,
+                updated_at=updated,
+                schema_version=ver,
+            )
+            metadata = dict(probe.to_dict().get("metadata") or {})
         return cls(
             project_id=pid,
             name=name,
