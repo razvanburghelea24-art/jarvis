@@ -880,6 +880,45 @@ def run_reply_engine(db: "Database", cfg, tts: Optional[Any],
         except Exception as e:
             debug_log(f"state memory command failed (ignored): {type(e).__name__}", "memory")
 
+    # Step 0b2 (internet research): Phase 4 · Section F — owner-triggered only.
+    # Dual gate: (1) confirm subject before any network, (2) separate memorize
+    # offer → State Memory readback. Inert unless internet_learning_enabled.
+    # No scheduler / background polling.
+    if bool(getattr(cfg, "internet_learning_enabled", False)) and dialogue_memory is not None:
+        try:
+            from ..memory.state_store import StateStore
+            from ..memory.learning.internet_research import try_internet_research_command
+
+            _cid = getattr(dialogue_memory, "conversation_id", None) or "interactive"
+            _ss = None
+            if bool(getattr(cfg, "state_memory_enabled", False)):
+                _ss = StateStore(
+                    db,
+                    require_confirmation=bool(
+                        getattr(cfg, "memory_require_confirmation", True)),
+                )
+            _irc = try_internet_research_command(
+                text,
+                cfg=cfg,
+                dialogue_memory=dialogue_memory,
+                state_store=_ss,
+                conversation_id=str(_cid),
+            )
+            if _irc.handled and _irc.reply:
+                debug_log("internet research command handled", "research")
+                print("  [F] Cercetare internet: procesata", flush=True)
+                if tts is not None and getattr(tts, "enabled", False):
+                    try:
+                        tts.speak(_irc.reply)
+                    except Exception:
+                        pass
+                return _irc.reply
+        except Exception as e:
+            debug_log(
+                f"internet research command failed (ignored): {type(e).__name__}",
+                "research",
+            )
+
     # Step 0b: Learning Loop voice commands (memorize / forget / what learned).
     # Gated by conversation_learning_enabled (default false).
     if bool(getattr(cfg, "conversation_learning_enabled", False)) and dialogue_memory is not None:
