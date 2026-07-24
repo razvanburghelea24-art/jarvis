@@ -183,6 +183,15 @@ def build_capability_registry(cfg) -> list[Capability]:
                          "Mod dezvoltare (declanșat de proprietar)",
                          DISABLED, _flag_detail(False)))
 
+    # Claude bridge — same gate as owner-triggered development; never invent
+    # that Claude is available when the master switch / provider is off.
+    if dev_on and provider == "claude_cli":
+        caps.append(_cap("claude_bridge", "Claude bridge (agent de dezvoltare)",
+                         CONFIGURED, "activ, provider claude_cli"))
+    else:
+        caps.append(_cap("claude_bridge", "Claude bridge (agent de dezvoltare)",
+                         DISABLED, _flag_detail(False)))
+
     # Premium cloud voice — when switched on it still needs a credential from
     # the Windows Credential Manager, which this pure helper never reads, so
     # the honest status is BLOCKED (gated on a prerequisite), else DISABLED.
@@ -221,12 +230,16 @@ _COMMAND_PREFIX = re.compile(
 # Every pattern runs against folded (lowercased, ASCII) text and is anchored on
 # a reflexive / second-person stem so it stays narrow.
 
-_RE_WHO = re.compile(r"\b(cine esti|ce esti tu|cine e cora|tu cine esti)\b")
+_RE_WHO = re.compile(r"\b(cine esti|ce esti tu|cine e cora|tu cine esti|"
+                     r"cum te cheama|tu esti cora)\b")
 
 _RE_CAPABILITIES = re.compile(
     r"\bce poti (?:sa )?fac[ie]\b|\bce stii (?:sa )?faci\b|"
     r"\bcu ce (?:ma |mă )?poti ajuta\b|\bce functii ai\b|"
-    r"\bce esti capabila (?:sa faci)?\b"
+    r"\bce esti capabila (?:sa faci)?\b|"
+    r"\bce (?:functii|module|capacitati) (?:sunt )?(?:active|activate|disponibile)\b|"
+    r"\bcare (?:functii|module) (?:sunt )?(?:active|activate|disponibile)\b|"
+    r"\bce (?:ai )?activ\b"
 )
 
 _RE_VOICE = re.compile(
@@ -250,6 +263,53 @@ _RE_CONNECTED = re.compile(
     r"\bcu ce (?:sisteme |servicii )esti conectat\w*\b|"
     r"\bla ce esti legat\w*\b"
 )
+
+# Feature-flag / development / module status — must beat the LLM so it cannot
+# claim "autodezvoltarea este activă" when the gate is OFF.
+_RE_FEATURE_STATUS = re.compile(
+    r"\b("
+    r"autodezvoltare\w*|auto[- ]?dezvoltare\w*|self[- ]?develop\w*|"
+    r"mod(?:ul)? (?:de )?dezvoltare|development mode|"
+    r"owner[_ ]?triggered[_ ]?development|"
+    r"invatare(?:a)? (?:din |de pe )?internet|internet learning|"
+    r"auto[- ]?evaluare\w*|self[- ]?eval\w*|"
+    r"memorie(?:a)? de stare|state memory|"
+    r"claude(?: bridge)?|bridge(?:-ul)? (?:claude|de dezvoltare)|"
+    r"poti (?:sa )?(?:te )?modifici|"
+    r"poti (?:sa )?fac(?:i|e) (?:push|deploy|merge)|"
+    r"porneste (?:autodezvoltarea|modul de dezvoltare)|"
+    r"activeaza (?:autodezvoltarea|modul de dezvoltare|state memory|"
+    r"internet learning|auto[- ]?evaluarea)"
+    r")\b"
+)
+
+# Memory-recall probes — never invent facts; no DB lookup in this module.
+# Match personal recall ("îți amintești", "ai în memorie", "știi despre…",
+# "știi cine sunt…"). Explicitly NOT general knowledge ("știi ce este X") or
+# capability ("știi să scrii/faci…") — those fall through to the LLM / other
+# handlers.
+_RE_MEMORY_RECALL = re.compile(
+    r"\b("
+    r"iti amintesti|"
+    r"ai (?:ceva )?in memorie|"
+    r"ai retinut|"
+    r"tii minte|"
+    r"stii (?:tu )?despre|"
+    r"ce stii despre|"
+    r"stii (?:tu )?cine (?:sunt|e(?:ste)?)|"
+    r"ai informatie(?:a)? (?:despre|in memorie)"
+    r")\b"
+)
+
+# If a recall stem also looks like general knowledge / skill, do not hijack.
+_RE_NOT_MEMORY_RECALL = re.compile(
+    r"\bstii (?:tu )?(?:sa|să)\b|"
+    r"\bstii (?:tu )?ce (?:este|inseamna)\b|"
+    r"\bstii (?:tu )?cum (?:se|sa|să)\b|"
+    r"\bce stii (?:sa|să)\b"
+)
+
+_MEMORY_RECALL_ANSWER = "Nu am această informație în memoria mea."
 
 
 # ---------------------------------------------------------------- answer builders
@@ -354,12 +414,87 @@ def _capabilities_answer(cfg) -> str:
     return answer
 
 
-# (matcher, builder) pairs, tried in order. Distinct stems, so order only
-# fixes ties that cannot occur; kept explicit for readability.
+def _status_phrase(cap: Capability) -> str:
+    if cap.status in (AVAILABLE, CONFIGURED):
+        detail = f" ({cap.detail})" if cap.detail else ""
+        return f"activ{detail}"
+    if cap.status == BLOCKED:
+        detail = f" — {cap.detail}" if cap.detail else ""
+        return f"blocat{detail}"
+    if cap.status == NOT_CONNECTED:
+        return "neconectat"
+    return "dezactivat"
+
+
+def _feature_status_answer(cfg, folded: str = "") -> str:
+    """Answer about development / learning / memory gates from live cfg only."""
+    reg = {c.key: c for c in build_capability_registry(cfg)}
+    topics: list[tuple[re.Pattern[str], str, str]] = [
+        (re.compile(r"claude|bridge"), "claude_bridge",
+         "Claude bridge"),
+        (re.compile(r"autodezvolt|self[- ]?develop|mod(?:ul)? (?:de )?dezvolt|"
+                    r"development mode|owner[_ ]?triggered|te modifici|"
+                    r"porneste (?:autodezvolt|modul de dezvolt)|"
+                    r"activeaza (?:autodezvolt|modul de dezvolt)"),
+         "owner_triggered_development", "Autodezvoltarea / modul de dezvoltare"),
+        (re.compile(r"push|deploy|merge"), "owner_triggered_development",
+         "Push, deploy și merge"),
+        (re.compile(r"internet|invatare"), "internet_learning",
+         "Învățarea din internet"),
+        (re.compile(r"auto[- ]?evalu|self[- ]?eval"), "self_eval",
+         "Auto-evaluarea"),
+        (re.compile(r"state memory|memorie(?:a)? de stare"), "state_memory",
+         "Memoria de stare"),
+    ]
+
+    for matcher, key, label in topics:
+        if matcher.search(folded):
+            cap = reg.get(key)
+            if cap is None:
+                continue
+            status = _status_phrase(cap)
+            if cap.status == DISABLED:
+                return (
+                    f"{label} este dezactivat acum. "
+                    "Nu pot pretinde că rulează și nu îl pornesc singură — "
+                    "doar la cererea explicită a ownerului, prin configurație."
+                )
+            if key == "owner_triggered_development" and re.search(
+                r"push|deploy|merge", folded
+            ):
+                return (
+                    f"{label}: modul de dezvoltare este {status}. "
+                    "Nu fac push, deploy sau merge fără aprobarea ta explicită."
+                )
+            return f"{label} este {status}."
+
+    disabled = [c.label for c in reg.values() if c.status == DISABLED]
+    active = [c.label for c in reg.values()
+              if c.status in (AVAILABLE, CONFIGURED)]
+    parts = []
+    if active:
+        parts.append("Active acum: " + ", ".join(active) + ".")
+    if disabled:
+        parts.append("Dezactivate acum: " + ", ".join(disabled) + ".")
+    parts.append(
+        "Statusul vine din configurația live, nu din inventarea modelului."
+    )
+    return " ".join(parts)
+
+
+def _memory_recall_answer(cfg) -> str:
+    """Never invent remembered facts — this module does no DB lookup."""
+    return _MEMORY_RECALL_ANSWER
+
+
+# (matcher, builder) pairs, tried in order. Feature-status and memory-recall
+# sit before the broad capability / who stems so false LLM claims cannot slip.
 _HANDLERS: list[tuple[re.Pattern[str], Callable[[object], str]]] = [
     (_RE_VOICE, _voice_answer),
     (_RE_MODEL, _model_answer),
+    (_RE_FEATURE_STATUS, _feature_status_answer),
     (_RE_MEMORY, _memory_answer),
+    (_RE_MEMORY_RECALL, _memory_recall_answer),
     (_RE_CONNECTED, _connected_answer),
     (_RE_CAPABILITIES, _capabilities_answer),
     (_RE_WHO, _who_answer),
@@ -399,5 +534,9 @@ def answer_identity_question(text: str, cfg) -> Optional[str]:
 
     for matcher, builder in _HANDLERS:
         if matcher.search(folded):
+            if builder is _memory_recall_answer and _RE_NOT_MEMORY_RECALL.search(folded):
+                continue
+            if builder is _feature_status_answer:
+                return _finalise(_feature_status_answer(cfg, folded))
             return _finalise(builder(cfg))
     return None

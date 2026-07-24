@@ -509,6 +509,11 @@ class ChatterboxTTS:
         self._thread.join(timeout=2.0)
         self._thread = None
         self._stop.clear()
+        # Force SPEAKING→IDLE after cancel/teardown (queue may still look non-empty)
+        try:
+            self._notify_speaking_state(False, force=True)
+        except Exception:
+            pass
 
     def speak(self, text: str, completion_callback: Optional[Callable[[], None]] = None,
               duration_callback: Optional[Callable[[float], None]] = None) -> None:
@@ -629,26 +634,34 @@ class ChatterboxTTS:
                     pass
                 self._completion_callback = None
     
-    def _notify_speaking_state(self, is_speaking: bool) -> None:
+    def _notify_speaking_state(self, is_speaking: bool, *, force: bool = False) -> None:
         """Notify the face widget of speaking state changes.
 
-        Uses file-based approach to work across processes:
-        - Dev mode runs daemon as subprocess (different process)
-        - File-based state works across process boundaries
+        SPEAKING→IDLE only when playback truly ends (queue drained) or ``force``
+        (stop/shutdown). Never clears between back-to-back queue items, and never
+        overwrites LISTENING / THINKING / DICTATING / etc.
         """
-        # Import here to avoid circular dependencies
         try:
             from desktop_app.face_widget import get_jarvis_state, JarvisState
             state_manager = get_jarvis_state()
             if is_speaking:
                 debug_log("setting face state to SPEAKING (chatterbox)", "tts")
                 state_manager.set_state(JarvisState.SPEAKING)
-            # Note: When speaking ends, we don't change state here - let daemon manage transitions
+                return
+            if state_manager.state != JarvisState.SPEAKING:
+                return
+            if not force:
+                try:
+                    if not self._q.empty():
+                        return
+                except Exception:
+                    pass
+            debug_log("clearing face state SPEAKING → IDLE (chatterbox)", "tts")
+            state_manager.set_state(JarvisState.IDLE)
         except ImportError:
             debug_log("face widget not available (ImportError) (chatterbox)", "tts")
         except Exception as e:
-            # Don't let face widget errors affect TTS
-            debug_log(f"failed to set face state to SPEAKING (chatterbox): {e}", "tts")
+            debug_log(f"failed to set face state (chatterbox): {e}", "tts")
 
     # Loopback guard helpers (same interface as TextToSpeech)
     def is_speaking(self) -> bool:
@@ -830,6 +843,11 @@ class PiperTTS:
         self._thread.join(timeout=2.0)
         self._thread = None
         self._stop.clear()
+        # Force SPEAKING→IDLE after cancel/teardown
+        try:
+            self._notify_speaking_state(False, force=True)
+        except Exception:
+            pass
 
     def speak(self, text: str, completion_callback: Optional[Callable[[], None]] = None,
               duration_callback: Optional[Callable[[float], None]] = None) -> None:
@@ -1074,18 +1092,35 @@ class PiperTTS:
                     # no shared slot to clear.
                     self._completion_callback = None
 
-    def _notify_speaking_state(self, is_speaking: bool) -> None:
-        """Notify the face widget of speaking state changes."""
+    def _notify_speaking_state(self, is_speaking: bool, *, force: bool = False) -> None:
+        """Notify the face widget of speaking state changes.
+
+        Clears SPEAKING→IDLE only when the FIFO is drained or ``force`` is set
+        (engine stop). Skips IDLE between queued items so multi-utterance
+        playback does not flicker. Never overwrites non-SPEAKING states.
+        Does not touch F5 synthesis or the playback watchdog.
+        """
         try:
             from desktop_app.face_widget import get_jarvis_state, JarvisState
             state_manager = get_jarvis_state()
             if is_speaking:
                 debug_log("setting face state to SPEAKING (piper)", "tts")
                 state_manager.set_state(JarvisState.SPEAKING)
+                return
+            if state_manager.state != JarvisState.SPEAKING:
+                return
+            if not force:
+                try:
+                    if not self._q.empty():
+                        return
+                except Exception:
+                    pass
+            debug_log("clearing face state SPEAKING → IDLE (piper)", "tts")
+            state_manager.set_state(JarvisState.IDLE)
         except ImportError:
             debug_log("face widget not available (ImportError) (piper)", "tts")
         except Exception as e:
-            debug_log(f"failed to set face state to SPEAKING (piper): {e}", "tts")
+            debug_log(f"failed to set face state (piper): {e}", "tts")
 
     # Loopback guard helpers (same interface as TextToSpeech)
     def is_speaking(self) -> bool:

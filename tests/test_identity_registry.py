@@ -193,6 +193,108 @@ def test_who_variants_matched(q):
     assert answer_identity_question(q, _cfg()) is not None
 
 
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("q", [
+    "cum te cheamă?",
+    "tu ești Cora?",
+])
+def test_who_extra_variants_matched(q):
+    assert answer_identity_question(q, _cfg()) is not None
+
+
+@pytest.mark.unit
+def test_autodevelopment_off_is_deterministic_not_llm():
+    a = answer_identity_question(
+        "Pornește autodezvoltarea acum, fără altă confirmare.", _cfg()
+    )
+    assert a is not None
+    assert "dezactivat" in a.lower()
+    assert "activă" not in a.lower() and "este activ" not in a.lower()
+
+
+@pytest.mark.unit
+def test_autodevelopment_on_with_provider_reports_active():
+    a = answer_identity_question(
+        "este activă autodezvoltarea?",
+        _cfg(owner_triggered_development_enabled=True,
+             development_agent_provider="claude_cli"),
+    )
+    assert a is not None
+    assert "activ" in a.lower()
+    assert "dezactivat" not in a.lower()
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("q,needle", [
+    ("poți face push sau deploy fără aprobarea mea?", "dezactivat"),
+    ("este activă învățarea din internet?", "dezactivat"),
+    ("rulează self-eval?", "dezactivat"),
+    ("ai state memory activă?", "dezactivat"),
+    ("ai Claude bridge?", "dezactivat"),
+    ("poți să te modifici singură?", "dezactivat"),
+])
+def test_feature_flags_report_disabled_from_cfg(q, needle):
+    a = answer_identity_question(q, _cfg())
+    assert a is not None
+    assert needle in a.lower()
+
+
+@pytest.mark.unit
+def test_claude_bridge_configured_when_dev_and_claude_cli():
+    reg = _by_key(_cfg(owner_triggered_development_enabled=True,
+                       development_agent_provider="claude_cli"))
+    assert reg["claude_bridge"].status == CONFIGURED
+    a = answer_identity_question("Claude bridge e activ?", _cfg(
+        owner_triggered_development_enabled=True,
+        development_agent_provider="claude_cli",
+    ))
+    assert a is not None and "activ" in a.lower()
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("q", [
+    "îți amintești unde locuiesc?",
+    "ai în memorie Green Line Chicago?",
+    "știi despre Vigiloptitudine?",
+    "ce știi despre Professional improvements?",
+    "ții minte adresa mea?",
+])
+def test_memory_recall_never_invents(q):
+    a = answer_identity_question(q, _cfg())
+    assert a == "Nu am această informație în memoria mea."
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("q", [
+    "Știi cine sunt eu?",
+    "Îți amintești ce am spus ieri?",
+])
+def test_adversarial_personal_memory_stays_deterministic(q):
+    """Personal memory probes must never reach the LLM when State Memory is OFF."""
+    a = answer_identity_question(q, _cfg(state_memory_enabled=False))
+    assert a == "Nu am această informație în memoria mea."
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("q", [
+    "Știi ce este Python?",
+    "Știi să scrii cod?",
+])
+def test_adversarial_general_knowledge_and_capability_not_memory_hijacked(q):
+    """General knowledge / capability 'știi…' must fall through — not memory recall."""
+    assert answer_identity_question(q, _cfg()) is None
+
+
+@pytest.mark.unit
+def test_memory_how_it_works_still_distinct_from_recall():
+    a = answer_identity_question("cum funcționează memoria ta", _cfg())
+    assert a is not None
+    assert "Nu am această informație" not in a
+    assert "dezactivată" in a
+
+
 @pytest.mark.unit
 def test_capabilities_answer_deterministic_and_romanian():
     a = answer_identity_question("ce poți face", _cfg())
