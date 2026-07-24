@@ -246,6 +246,9 @@ class Settings:
     # Brain Memory v2 — modular STM/LTM/episodic/semantic/skill/preference/project
     # skeleton. Default OFF; no runtime wiring until an explicit integration step.
     brain_memory_v2_enabled: bool
+    # Brain V3 — cognitive graph/timeline/retrieval/planner layer over Brain V2.
+    # Default OFF; zero I/O until an explicit integration step opts in.
+    brain_v3_enabled: bool
 
     # OpenAI Realtime premium voice backend (default off). API key is read
     # only from Windows Credential Manager target ``Cora.OpenAI`` — never from
@@ -628,6 +631,7 @@ def get_default_config() -> Dict[str, Any]:
         "development_agent_provider": "disabled",  # "disabled" | "claude_cli"
         "audit_panel_enabled": False,
         "brain_memory_v2_enabled": False,
+        "brain_v3_enabled": False,
 
         # OpenAI Realtime premium (off until paid live test)
         "openai_realtime_enabled": False,
@@ -939,6 +943,9 @@ def load_settings() -> Settings:
     brain_memory_v2_enabled = _coerce_strict_bool(
         merged.get("brain_memory_v2_enabled", False), default=False
     )
+    brain_v3_enabled = _coerce_strict_bool(
+        merged.get("brain_v3_enabled", False), default=False
+    )
 
     chat_ui_enabled = bool(merged.get("chat_ui_enabled", False))
     chat_ui_mode = str(merged.get("chat_ui_mode", "classic") or "classic").strip().lower()
@@ -1181,6 +1188,7 @@ def load_settings() -> Settings:
         development_agent_provider=development_agent_provider,
         audit_panel_enabled=audit_panel_enabled,
         brain_memory_v2_enabled=brain_memory_v2_enabled,
+        brain_v3_enabled=brain_v3_enabled,
 
         chat_ui_enabled=chat_ui_enabled,
         chat_ui_mode=chat_ui_mode,

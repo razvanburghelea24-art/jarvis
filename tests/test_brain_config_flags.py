@@ -30,6 +30,7 @@ BRAIN_BOOL_DEFAULTS = {
     "owner_triggered_development_enabled": False,
     "audit_panel_enabled": False,
     "brain_memory_v2_enabled": False,
+    "brain_v3_enabled": False,
 }
 BRAIN_OTHER_DEFAULTS = {
     "owner_profile_max_chars": 600,
@@ -78,6 +79,7 @@ def test_flags_round_trip_when_enabled(tmp_path, monkeypatch):
         "owner_triggered_development_enabled": True,
         "audit_panel_enabled": True,
         "brain_memory_v2_enabled": True,
+        "brain_v3_enabled": True,
         "owner_profile_max_chars": 800,
         "development_agent_provider": "claude_cli",
     }

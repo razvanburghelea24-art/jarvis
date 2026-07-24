@@ -353,6 +353,10 @@ def _build_field_metadata() -> List[FieldMeta]:
       "Enable the modular Brain Memory v2 facade (STM/LTM/episodic/…). "
       "Skeleton only — no prompt wiring yet. Default off.",
       "memory", "bool")
+    f("brain_v3_enabled", "Brain V3 cognitive foundation",
+      "Enable Brain V3 graph/timeline/retrieval/planner (non-executable). "
+      "Default off — no live I/O until explicitly enabled.",
+      "memory", "bool")
 
     # --- Location ---
     f("location_enabled", "Enable Location",
