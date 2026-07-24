@@ -19,6 +19,13 @@ from .self_eval import (
     evaluate_conversation,
     to_lessons,
 )
+from .owner_eval import (
+    EvaluationVerdict,
+    EvaluationFinding,
+    EvaluationReport,
+    try_self_eval_command,
+    format_evaluation_report,
+)
 
 __all__ = [
     "CandidateKind",
@@ -27,4 +34,9 @@ __all__ = [
     "TurnRecord",
     "evaluate_conversation",
     "to_lessons",
+    "EvaluationVerdict",
+    "EvaluationFinding",
+    "EvaluationReport",
+    "try_self_eval_command",
+    "format_evaluation_report",
 ]

@@ -919,6 +919,43 @@ def run_reply_engine(db: "Database", cfg, tts: Optional[Any],
                 "research",
             )
 
+    # Step 0b3 (self evaluation): Phase 4 · Section G — owner-triggered only.
+    # Read-only report; never mutates code/config/memory/KG. No scheduler.
+    if bool(getattr(cfg, "self_eval_enabled", False)) and dialogue_memory is not None:
+        try:
+            from ..memory.state_store import StateStore as _SSEval
+            from ..eval.owner_eval import try_self_eval_command
+
+            _cid_e = getattr(dialogue_memory, "conversation_id", None) or "interactive"
+            _ss_e = None
+            if bool(getattr(cfg, "state_memory_enabled", False)):
+                _ss_e = _SSEval(
+                    db,
+                    require_confirmation=bool(
+                        getattr(cfg, "memory_require_confirmation", True)),
+                )
+            _sec = try_self_eval_command(
+                text,
+                cfg=cfg,
+                dialogue_memory=dialogue_memory,
+                state_store=_ss_e,
+                actor="owner",
+            )
+            if _sec.handled and _sec.reply:
+                debug_log("self_eval command handled", "eval")
+                print("  [G] Autoevaluare: raport generat", flush=True)
+                if tts is not None and getattr(tts, "enabled", False):
+                    try:
+                        tts.speak(_sec.reply)
+                    except Exception:
+                        pass
+                return _sec.reply
+        except Exception as e:
+            debug_log(
+                f"self_eval command failed (ignored): {type(e).__name__}",
+                "eval",
+            )
+
     # Step 0b: Learning Loop voice commands (memorize / forget / what learned).
     # Gated by conversation_learning_enabled (default false).
     if bool(getattr(cfg, "conversation_learning_enabled", False)) and dialogue_memory is not None:
