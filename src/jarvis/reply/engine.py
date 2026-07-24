@@ -956,6 +956,36 @@ def run_reply_engine(db: "Database", cfg, tts: Optional[Any],
                 "eval",
             )
 
+    # Step 0b4 (owner development): Phase 4 · Section H — PLAN_ONLY foundation.
+    # Inert unless owner_triggered_development_enabled. Never writes / shells /
+    # commits. Backend must be injected by callers that enable the flag in tests;
+    # live activation is a future phase (flag stays OFF).
+    if bool(getattr(cfg, "owner_triggered_development_enabled", False)) and dialogue_memory is not None:
+        try:
+            from ..development.owner_development import try_owner_development_command
+
+            _hdc = try_owner_development_command(
+                text,
+                cfg=cfg,
+                dialogue_memory=dialogue_memory,
+                backend=getattr(cfg, "_h_dev_backend", None),
+                actor="owner",
+            )
+            if _hdc.handled and _hdc.reply:
+                debug_log("owner_development command handled", "development")
+                print("  [H] Plan dezvoltare (PLAN_ONLY)", flush=True)
+                if tts is not None and getattr(tts, "enabled", False):
+                    try:
+                        tts.speak(_hdc.reply)
+                    except Exception:
+                        pass
+                return _hdc.reply
+        except Exception as e:
+            debug_log(
+                f"owner_development command failed (ignored): {type(e).__name__}",
+                "development",
+            )
+
     # Step 0b: Learning Loop voice commands (memorize / forget / what learned).
     # Gated by conversation_learning_enabled (default false).
     if bool(getattr(cfg, "conversation_learning_enabled", False)) and dialogue_memory is not None:
