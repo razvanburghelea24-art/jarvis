@@ -120,6 +120,11 @@ class RepoSnapshot:
     working_tree_clean: bool
     status_summary: str = ""
     recent_log: Tuple[str, ...] = ()
+    git_status_reliable: bool = True
+    inventory_truncated: bool = False
+    truncation_reasons: Tuple[str, ...] = ()
+    detached_head: bool = False
+    git_error: Optional[str] = None
 
 
 class ReadOnlyRepoBackend(ABC):

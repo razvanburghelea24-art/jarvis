@@ -255,6 +255,30 @@ def build_development_plan(
             ["workspace pinning failed"],
         )
 
+    if getattr(snap, "git_error", None) and not snap.head_sha:
+        return _blocked(
+            DevelopmentVerdict.INSUFFICIENT_CONTEXT,
+            f"Git metadata unavailable: {snap.git_error}",
+            "git metadata missing/corrupt",
+            ["git read-only snapshot"],
+        )
+
+    if not getattr(snap, "git_status_reliable", True):
+        return _blocked(
+            DevelopmentVerdict.INSUFFICIENT_CONTEXT,
+            f"Git status unreliable without shell: {snap.status_summary}",
+            "git status unreliable",
+            ["no-shell git status"],
+        )
+
+    if getattr(snap, "detached_head", False) and snap.branch in ("HEAD", ""):
+        return _blocked(
+            DevelopmentVerdict.INSUFFICIENT_CONTEXT,
+            "Detached HEAD — reattach to the pinned branch before planning.",
+            "detached HEAD",
+            ["detached HEAD"],
+        )
+
     if snap.branch != CANONICAL_BRANCH:
         return _blocked(
             DevelopmentVerdict.BLOCKED_WRONG_WORKSPACE,
@@ -355,6 +379,11 @@ def build_development_plan(
     limitations: List[str] = []
     if not candidates:
         limitations.append("Nu am găsit fișiere candidate suficiente pentru obiectiv.")
+    if getattr(snap, "inventory_truncated", False):
+        reasons = list(getattr(snap, "truncation_reasons", ()) or ())
+        limitations.append(
+            "Inventar trunchiat: " + (", ".join(reasons) if reasons else "limite resurse")
+        )
 
     plan = DevelopmentPlan(
         plan_id=_id(),
@@ -637,7 +666,27 @@ def try_owner_development_command(
                             "Nicio modificare nu a fost aplicată."
                         ),
                     )
-                if backend is None:
+                # Lazy backend: inject fake in tests; live only after both gates + flag ON
+                active_backend = backend
+                if active_backend is None:
+                    try:
+                        from .live_backend import create_live_backend_after_confirm
+
+                        active_backend = create_live_backend_after_confirm(
+                            cfg,
+                            injected=getattr(cfg, "_h_dev_backend", None),
+                        )
+                    except Exception as e:
+                        setattr(dialogue_memory, _PENDING, None)
+                        _audit(dialogue_memory, "plan_blocked", reason=type(e).__name__)
+                        return CommandResult(
+                            handled=True,
+                            reply=(
+                                "Nu am putut deschide backend-ul read-only. "
+                                "Nicio modificare nu a fost aplicată."
+                            ),
+                        )
+                if active_backend is None:
                     setattr(dialogue_memory, _PENDING, None)
                     _audit(dialogue_memory, "plan_blocked", reason="no_backend")
                     return CommandResult(
@@ -657,7 +706,7 @@ def try_owner_development_command(
                         desired_outcome=pend.desired_outcome,
                         constraints=pend.constraints,
                         ambiguous_or_dangerous=pend.ambiguous_or_dangerous,
-                        backend=backend,
+                        backend=active_backend,
                         consult_g=consult_g,
                         cfg=cfg,
                         now_iso=now_iso,

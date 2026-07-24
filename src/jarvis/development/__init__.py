@@ -25,6 +25,10 @@ from .read_only_backend import (
     FakeReadOnlyBackend,
     AccessDenied,
 )
+from .live_backend import (
+    LiveReadOnlyBackend,
+    create_live_backend_after_confirm,
+)
 
 __all__ = [
     "DevelopmentPlan",
@@ -41,5 +45,7 @@ __all__ = [
     "PENDING_TTL_SEC",
     "ReadOnlyRepoBackend",
     "FakeReadOnlyBackend",
+    "LiveReadOnlyBackend",
+    "create_live_backend_after_confirm",
     "AccessDenied",
 ]
