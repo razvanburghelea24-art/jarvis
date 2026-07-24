@@ -419,6 +419,25 @@ def _save_json(path: Path, data: Dict[str, Any]) -> bool:
         return False
 
 
+def _coerce_strict_bool(value: Any, *, default: bool = False) -> bool:
+    """Fail-safe bool for high-risk feature flags.
+
+    Only JSON ``true`` / ``false`` and numeric ``1`` / ``0`` are accepted.
+    Strings, null, lists, and other junk map to ``default`` (normally False).
+    """
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        if value == 1 or value == 1.0:
+            return True
+        if value == 0 or value == 0.0:
+            return False
+        return default
+    return default
+
+
 def _migrate_config(cfg_path: Path, cfg_json: Dict[str, Any]) -> Dict[str, Any]:
     """
     Apply config migrations for version upgrades.
@@ -917,7 +936,9 @@ def load_settings() -> Settings:
     if development_agent_provider not in ("disabled", "claude_cli"):
         development_agent_provider = "disabled"  # fail-safe to the no-op provider
     audit_panel_enabled = bool(merged.get("audit_panel_enabled", False))
-    brain_memory_v2_enabled = bool(merged.get("brain_memory_v2_enabled", False))
+    brain_memory_v2_enabled = _coerce_strict_bool(
+        merged.get("brain_memory_v2_enabled", False), default=False
+    )
 
     chat_ui_enabled = bool(merged.get("chat_ui_enabled", False))
     chat_ui_mode = str(merged.get("chat_ui_mode", "classic") or "classic").strip().lower()
