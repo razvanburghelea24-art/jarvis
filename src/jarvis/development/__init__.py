@@ -28,6 +28,8 @@ from .read_only_backend import (
 from .live_backend import (
     LiveReadOnlyBackend,
     create_live_backend_after_confirm,
+    resolve_git_metadata_paths,
+    GitMetadataPaths,
 )
 
 __all__ = [
@@ -47,5 +49,7 @@ __all__ = [
     "FakeReadOnlyBackend",
     "LiveReadOnlyBackend",
     "create_live_backend_after_confirm",
+    "resolve_git_metadata_paths",
+    "GitMetadataPaths",
     "AccessDenied",
 ]

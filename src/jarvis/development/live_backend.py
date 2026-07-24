@@ -478,53 +478,221 @@ def _is_text_candidate(rel: str, entry: Path) -> bool:
 # ------------------------------------------------------------------ git (files only)
 
 
-def _read_git_snapshot(root: Path) -> GitSnapshotInfo:
-    git_dir = root / ".git"
-    if not git_dir.exists():
-        return GitSnapshotInfo(
-            root=str(root),
-            branch="",
-            head_sha="",
-            working_tree_clean=False,
-            status_reliable=False,
-            status_summary="missing .git",
-            error="missing .git",
-        )
-    if git_dir.is_file():
-        # git worktree / submodule pointer file — read-only parse of gitdir:
+MAX_GITDIR_FILE_BYTES = 512
+_DEVICE_NAMES = frozenset({
+    "con", "prn", "aux", "nul",
+    "com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8", "com9",
+    "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9",
+})
+
+
+@dataclass(frozen=True)
+class GitMetadataPaths:
+    """Resolved read-only locations for HEAD/index (git_dir) and refs (common_dir)."""
+
+    workspace_root: Path
+    git_dir: Path
+    common_dir: Path
+    is_worktree: bool
+    error: Optional[str] = None
+
+
+def resolve_git_metadata_paths(workspace_root: Path | str) -> GitMetadataPaths:
+    """Resolve git metadata dirs for a normal repo or a linked worktree.
+
+    Read-only. Never shells out, never follows unsafe gitdir targets, never
+    creates locks. On any ambiguity returns ``error`` set and empty dirs.
+    """
+    try:
+        root = Path(workspace_root).resolve()
+    except Exception:
+        return GitMetadataPaths(Path(), Path(), Path(), False, "unresolvable workspace root")
+
+    git_entry = root / ".git"
+    if not git_entry.exists():
+        return GitMetadataPaths(root, Path(), Path(), False, "missing .git")
+
+    if git_entry.is_dir():
+        # Normal repository
+        if git_entry.is_symlink():
+            try:
+                resolved = git_entry.resolve()
+                resolved.relative_to(root)
+            except Exception:
+                return GitMetadataPaths(root, Path(), Path(), False, "symlink .git escape")
+        return GitMetadataPaths(root, git_entry.resolve(), git_entry.resolve(), False, None)
+
+    if not git_entry.is_file():
+        return GitMetadataPaths(root, Path(), Path(), False, "unsupported .git type")
+
+    # --- worktree pointer file ---
+    try:
+        st = git_entry.stat()
+    except OSError as e:
+        return GitMetadataPaths(root, Path(), Path(), True, f".git unreadable: {e}")
+    if st.st_size > MAX_GITDIR_FILE_BYTES:
+        return GitMetadataPaths(root, Path(), Path(), True, ".git file too large")
+    try:
+        raw_bytes = git_entry.read_bytes()
+    except OSError as e:
+        return GitMetadataPaths(root, Path(), Path(), True, f".git read failed: {e}")
+    if b"\x00" in raw_bytes:
+        return GitMetadataPaths(root, Path(), Path(), True, ".git contains NUL")
+    try:
+        text = raw_bytes.decode("utf-8")
+    except UnicodeDecodeError:
         try:
-            text = git_dir.read_text(encoding="utf-8", errors="replace")
-        except OSError as e:
-            return GitSnapshotInfo(
-                root=str(root),
-                branch="",
-                head_sha="",
-                working_tree_clean=False,
-                status_reliable=False,
-                status_summary="unreadable .git file",
-                error=str(e),
-            )
-        m = re.match(r"gitdir:\s*(.+)$", text.strip(), re.I | re.M)
-        if not m:
-            return GitSnapshotInfo(
-                root=str(root),
-                branch="",
-                head_sha="",
-                working_tree_clean=False,
-                status_reliable=False,
-                status_summary="unsupported .git file",
-                error="unsupported .git file",
-            )
-        # Refuse to follow external gitdir (could escape)
+            text = raw_bytes.decode("ascii")
+        except UnicodeDecodeError:
+            return GitMetadataPaths(root, Path(), Path(), True, ".git not utf-8/ascii")
+
+    # Exactly one meaningful line
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    if len(lines) != 1:
+        return GitMetadataPaths(root, Path(), Path(), True, "gitdir must be a single line")
+    line = lines[0]
+    if not line.lower().startswith("gitdir:"):
+        return GitMetadataPaths(root, Path(), Path(), True, "missing gitdir: prefix")
+    target_raw = line.split(":", 1)[1].strip()
+    if not target_raw:
+        return GitMetadataPaths(root, Path(), Path(), True, "empty gitdir path")
+
+    err = _validate_gitdir_path_syntax(target_raw)
+    if err:
+        return GitMetadataPaths(root, Path(), Path(), True, err)
+
+    # Resolve relative to workspace root (location of the .git file)
+    try:
+        candidate = Path(target_raw)
+        if not candidate.is_absolute():
+            candidate = root / candidate
+        git_dir = candidate.resolve()
+    except Exception as e:
+        return GitMetadataPaths(root, Path(), Path(), True, f"gitdir resolve failed: {e}")
+
+    if not git_dir.is_dir():
+        return GitMetadataPaths(root, Path(), Path(), True, "gitdir target not a directory")
+
+    if not _is_under_git_worktrees(git_dir):
+        return GitMetadataPaths(
+            root, Path(), Path(), True, "gitdir not under .git/worktrees/"
+        )
+
+    # commondir → main repository .git
+    common, cerr = _resolve_commondir(git_dir)
+    if cerr or common is None:
+        return GitMetadataPaths(root, Path(), Path(), True, cerr or "commondir failed")
+
+    # worktree dir must live under common/worktrees/
+    try:
+        git_dir.relative_to((common / "worktrees").resolve())
+    except Exception:
+        return GitMetadataPaths(
+            root, Path(), Path(), True, "worktree not under common/worktrees"
+        )
+
+    return GitMetadataPaths(root, git_dir, common, True, None)
+
+
+def _validate_gitdir_path_syntax(path: str) -> Optional[str]:
+    p = path.strip()
+    if not p:
+        return "empty path"
+    if "\x00" in p:
+        return "NUL in path"
+    # No env / shell / URL
+    if any(ch in p for ch in ("$", "`", "|", ";", "&", "<", ">", "\n", "\r")):
+        return "forbidden character in gitdir path"
+    if "%" in p:
+        return "env-style % in gitdir path"
+    low = p.replace("\\", "/").lower()
+    if "://" in low:
+        return "URL gitdir rejected"
+    if low.startswith("//") or p.startswith("\\\\"):
+        return "UNC/network path rejected"
+    if low.startswith("//?/") or p.startswith("\\\\?\\"):
+        return "device/extended path rejected"
+    # Windows device names as a path component
+    for part in re.split(r"[\\/]", p):
+        base = part.split(".")[0].lower()
+        if base in _DEVICE_NAMES:
+            return "device path rejected"
+    return None
+
+
+def _is_under_git_worktrees(path: Path) -> bool:
+    parts = [x.lower() for x in path.parts]
+    for i in range(len(parts) - 2):
+        if parts[i] == ".git" and parts[i + 1] == "worktrees":
+            # must have a worktree name component
+            if i + 2 < len(parts) and parts[i + 2]:
+                return True
+    return False
+
+
+def _resolve_commondir(git_dir: Path) -> Tuple[Optional[Path], Optional[str]]:
+    """Read worktree ``commondir`` and resolve to the main Git directory."""
+    cfile = git_dir / "commondir"
+    if not cfile.is_file():
+        return None, "commondir missing"
+    try:
+        if cfile.stat().st_size > MAX_GITDIR_FILE_BYTES:
+            return None, "commondir too large"
+        raw = cfile.read_bytes()
+    except OSError as e:
+        return None, f"commondir unreadable: {e}"
+    if b"\x00" in raw:
+        return None, "commondir contains NUL"
+    try:
+        text = raw.decode("utf-8").strip()
+    except UnicodeDecodeError:
+        return None, "commondir not utf-8"
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    if len(lines) != 1:
+        return None, "commondir must be a single line"
+    target = lines[0]
+    err = _validate_gitdir_path_syntax(target)
+    if err:
+        return None, f"commondir {err}"
+    try:
+        cand = Path(target)
+        if not cand.is_absolute():
+            cand = git_dir / cand
+        common = cand.resolve()
+    except Exception as e:
+        return None, f"commondir resolve failed: {e}"
+    if not common.is_dir():
+        return None, "commondir not a directory"
+    # Must look like a Git common dir (has refs/ or HEAD or objects/)
+    if not (
+        (common / "HEAD").exists()
+        or (common / "refs").is_dir()
+        or (common / "objects").is_dir()
+    ):
+        return None, "commondir is not a git directory"
+    # Prevent escape: common must be an ancestor of git_dir via .../.git/worktrees/
+    try:
+        git_dir.resolve().relative_to((common / "worktrees").resolve())
+    except Exception:
+        return None, "commondir escape blocked"
+    return common, None
+
+
+def _read_git_snapshot(root: Path) -> GitSnapshotInfo:
+    meta = resolve_git_metadata_paths(root)
+    if meta.error or not meta.git_dir or not meta.common_dir:
         return GitSnapshotInfo(
             root=str(root),
             branch="",
             head_sha="",
             working_tree_clean=False,
             status_reliable=False,
-            status_summary="gitdir pointer unsupported (no follow)",
-            error="gitdir pointer unsupported",
+            status_summary=meta.error or "git metadata unresolved",
+            error=meta.error or "git metadata unresolved",
         )
+
+    git_dir = meta.git_dir
+    common_dir = meta.common_dir
 
     head_path = git_dir / "HEAD"
     try:
@@ -550,11 +718,11 @@ def _read_git_snapshot(root: Path) -> GitSnapshotInfo:
         else:
             branch = ref
             detached = True
-        ref_file = git_dir / ref
-        # Only allow refs under .git/refs (no escape)
+        # Refs live in the common directory for worktrees
+        ref_file = common_dir / ref
         try:
             resolved_ref = ref_file.resolve()
-            resolved_ref.relative_to(git_dir.resolve())
+            resolved_ref.relative_to(common_dir.resolve())
         except Exception:
             return GitSnapshotInfo(
                 root=str(root),
@@ -570,8 +738,7 @@ def _read_git_snapshot(root: Path) -> GitSnapshotInfo:
             if ref_file.is_file():
                 head_sha = ref_file.read_text(encoding="utf-8", errors="replace").strip()
             else:
-                # packed-refs fallback (read-only)
-                head_sha = _lookup_packed_ref(git_dir, ref) or ""
+                head_sha = _lookup_packed_ref(common_dir, ref) or ""
         except OSError as e:
             return GitSnapshotInfo(
                 root=str(root),
@@ -611,7 +778,7 @@ def _read_git_snapshot(root: Path) -> GitSnapshotInfo:
         )
 
     head_sha = head_sha.lower()
-    # Dirty detection via index vs worktree (pure Python) — fail closed to unreliable
+    # Dirty detection uses the *worktree* index (git_dir), never the main repo index
     clean, reliable, summary = _assess_worktree_clean(root, git_dir)
     return GitSnapshotInfo(
         root=str(root),
