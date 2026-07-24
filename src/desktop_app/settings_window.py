@@ -349,6 +349,10 @@ def _build_field_metadata() -> List[FieldMeta]:
     f("audit_panel_enabled", "Audit Panel",
       "Show the read-only brain audit tab in the Memory Viewer. Default off.",
       "memory", "bool")
+    f("brain_memory_v2_enabled", "Brain Memory v2 (skeleton)",
+      "Enable the modular Brain Memory v2 facade (STM/LTM/episodic/…). "
+      "Skeleton only — no prompt wiring yet. Default off.",
+      "memory", "bool")
 
     # --- Location ---
     f("location_enabled", "Enable Location",
