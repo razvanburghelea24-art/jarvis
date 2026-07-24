@@ -326,9 +326,40 @@ def test_worktree_dirty_and_untracked(tmp_path):
     assert "untracked" in g2.status_summary
 
 
+def _expected_head_sha_from_worktree_metadata(git_dir: Path, common_dir: Path) -> str:
+    """Read HEAD SHA from worktree metadata only (pathlib; no git CLI)."""
+    import re
+
+    head_raw = (git_dir / "HEAD").read_text(encoding="utf-8", errors="replace").strip()
+    if head_raw.startswith("ref:"):
+        ref = head_raw.split(":", 1)[1].strip()
+        ref_file = common_dir / ref
+        if ref_file.is_file():
+            sha = ref_file.read_text(encoding="utf-8", errors="replace").strip()
+        else:
+            sha = ""
+            packed = common_dir / "packed-refs"
+            if packed.is_file():
+                for line in packed.read_text(encoding="utf-8", errors="replace").splitlines():
+                    if not line or line.startswith("#") or line.startswith("^"):
+                        continue
+                    parts = line.split()
+                    if len(parts) >= 2 and parts[1] == ref:
+                        sha = parts[0].strip()
+                        break
+    elif re.fullmatch(r"[0-9a-fA-F]{40}", head_raw):
+        sha = head_raw
+    else:
+        sha = ""
+    assert re.fullmatch(r"[0-9a-fA-F]{40}", sha), f"invalid metadata HEAD: {sha!r}"
+    return sha.lower()
+
+
 @pytest.mark.unit
 def test_canonical_workspace_worktree_live_pinning():
     """Live pin: real canonical worktree resolves branch/HEAD (may be dirty if WIP)."""
+    import re
+
     from jarvis.development.models import CANONICAL_BRANCH, CANONICAL_WORKSPACE_ROOT
 
     root = Path(CANONICAL_WORKSPACE_ROOT)
@@ -338,9 +369,11 @@ def test_canonical_workspace_worktree_live_pinning():
     assert m.git_dir.name == "cora-f-real-search-clean"
     assert m.git_dir.parent.name == "worktrees"
     assert m.common_dir.name == ".git"
+    expected_sha = _expected_head_sha_from_worktree_metadata(m.git_dir, m.common_dir)
     g = _read_git_snapshot(root)
     assert g.branch == CANONICAL_BRANCH
-    assert g.head_sha.startswith("c26f211")
+    assert re.fullmatch(r"[0-9a-f]{40}", g.head_sha)
+    assert g.head_sha == expected_sha
     assert g.status_reliable is True  # dirty-or-clean still reliable
 
 
