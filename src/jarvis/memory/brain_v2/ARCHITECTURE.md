@@ -152,9 +152,40 @@ Override root via `create_brain_memory_v2(..., root_dir=...)`.
 | Owner identity | Owner Profile JSON | Unchanged; not mirrored here |
 | Conversation | DialogueMemory / ConversationStore | Unchanged (STM stub only) |
 
-No migration and no deletion of existing stores in this slice.
+No deletion of existing StateStore / Owner Profile rows in this slice.
 
-## Future migration plan (not implemented)
+## Schema versioning
+
+* Document stamp: `schema_version` on `preferences.json` / `projects.json` (`DOCUMENT_SCHEMA_VERSION = 1`).
+* Record stamps: `PREFERENCE_SCHEMA_VERSION` / `PROJECT_SCHEMA_VERSION` (also `1`).
+* Load path: `migration.migrate_document` — v1 no-op; older stamps migrate forward in memory; **newer unknown versions are refused** (fail-safe empty + error; never silently reinterpret).
+* After recovery from `.bak` / timestamped backup, primary is **healed** via atomic rewrite; corrupt primaries are never copied into `backups/`.
+
+## Limits & privacy (activation readiness)
+
+* Max items per document: 2000 (overrideable in tests).
+* Max serialized document size: 2_000_000 bytes.
+* Preference keys matching secret markers (`password`, `api_key`, `token`, …) are rejected.
+* Stored values are data, not instructions; confirmation ≠ system authority; H payloads are not executable.
+
+## Exclusive writer lock
+
+Each durable store holds an OS advisory lock on `<file>.lock` (Windows `msvcrt` / POSIX `fcntl`). A second process falls back to non-writable / `storage_ok=False` rather than corrupting JSON.
+
+## Rollback runbook
+
+Do **not** run this against production data until an explicit activation task.
+
+1. Set `brain_memory_v2_enabled` to `false` (or remove the key) in config — factory returns `None`, zero I/O.
+2. Leave `~/.config/jarvis/memory/brain_v2/` on disk untouched (preserve `preferences.json`, `projects.json`, `backups/`).
+3. Redeploy / checkout the previous code revision that still understands document schema ≤ current (or keep this package; OFF is enough).
+4. Confirm Cora starts with Brain V2 OFF; H and B–G unchanged.
+5. Confirm Brain V2 files were not rewritten while OFF.
+6. Re-enabling a newer build that supports the same `schema_version` can reload the preserved JSON.
+
+Backup/restore (ops): copy `preferences.json` / `projects.json` while idle; verify with `json.loads` + `migrate_document` before replacing; keep the prior files as `.bak`.
+
+## Future migration plan (StateStore bridge — not implemented)
 
 1. Optional read-through adapters: StateStore confirmed prefs → PreferenceMemory candidates.
 2. Dual-write behind a second flag.
@@ -167,3 +198,4 @@ No migration and no deletion of existing stores in this slice.
 * No engine or daemon imports on the hot path
 * No Security Center / audio / `internet_research` changes
 * No skill execution, no auto-learning, no secret persistence in logs
+* No live activation of `brain_memory_v2_enabled` in this readiness task
