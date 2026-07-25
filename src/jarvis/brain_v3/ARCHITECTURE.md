@@ -48,6 +48,7 @@ src/jarvis/brain_v3/
 ├── service.py           # BrainV3Service facade + create_brain_v3()
 ├── phase2_service.py    # BrainV3Phase2Service + create_brain_v3_phase2()
 ├── phase3_service.py    # BrainV3Phase3Service + create_brain_v3_phase3()
+├── live_chat.py         # optional Modern Chat recall injector (default OFF)
 ├── conversation/        # wired via Phase 2/3 facades
 ├── extraction/          # wired via Phase 2/3 facades
 ├── recall/              # Phase 3 approved contextual recall
@@ -272,14 +273,19 @@ Every proposal and suggested next step retains
 
 Status: **Phase 3 modules present**. Default **OFF** via
 `create_brain_v3_phase3(enabled=False)` and `brain_v3_phase3_enabled=false`.
-Still no daemon / engine wiring, no executable steps, no shell / network / Git /
-H authority.
+No executable steps, no shell / network / Git / H authority.
+
+Optional **live Modern Chat wiring** is gated separately by
+`brain_v3_live_chat_wiring_enabled` (default **false**). When that flag is
+OFF, the reply engine performs **zero** Brain V3 I/O even if Phase 3 modules
+exist.
 
 ### Additions
 
 ```text
 src/jarvis/brain_v3/
 ├── phase3_service.py
+├── live_chat.py                 # safe reply-engine injector (fail-closed)
 ├── recall/                      # approved contextual recall (read-only)
 └── conversational_intelligence/ # AnswerSupport (non-executable)
 ```
@@ -296,6 +302,32 @@ src/jarvis/brain_v3/
   `prohibited_claims` in `AnswerSupport`.
 - **No schema v2** — Phase 3 does not alter DDL; SCHEMA_VERSION remains 1.
 
+### Live Modern Chat wiring (local test profile)
+
+Pipeline injection point: `jarvis.reply.engine.run_reply_engine` →
+`maybe_build_approved_memory_context` → delimited
+`<approved_memory_context>` block appended to the system prompt.
+
+Required flags (all must be true):
+
+| Flag | Repo default | Local test profile |
+|------|--------------|--------------------|
+| `brain_v3_enabled` | false | true |
+| `brain_v3_phase3_enabled` | false | true |
+| `brain_v3_contextual_recall_enabled` | false | true |
+| `brain_v3_live_chat_wiring_enabled` | false | true |
+| `brain_v3_recall_read_only` | true | true |
+| `brain_v3_recall_approved_only` | true | true |
+| `brain_v3_recall_include_inferences` | false | false |
+
+When wiring fails (timeout, DB error, exception): chat continues without the
+block; diagnostics log metadata only (no secrets). Memory is never auto-approved
+or auto-committed from live chat turns.
+
+H / `owner_triggered_development_enabled` stay **false**. Authority-related
+memory text is excluded from usable facts and never grants execution.
+
 ### OFF behaviour
 
 `create_brain_v3_phase3(enabled=False)` returns `None` with **zero I/O**.
+`brain_v3_live_chat_wiring_enabled=false` skips the injector with **zero I/O**.
