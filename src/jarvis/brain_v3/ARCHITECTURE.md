@@ -24,7 +24,8 @@ does **not** auto-migrate Brain V2 data or modify Brain V2 when Brain V3 is OFF.
 ## Package layout
 
 Public package exports (`__all__`): `BrainV3Service`, `BrainV3Phase2Service`,
-`create_brain_v3`, `create_brain_v3_phase2`.
+`BrainV3Phase3Service`, `create_brain_v3`, `create_brain_v3_phase2`,
+`create_brain_v3_phase3`.
 
 ```
 src/jarvis/brain_v3/
@@ -46,16 +47,20 @@ src/jarvis/brain_v3/
 ├── diagnostics.py       # gather_diagnostics()
 ├── service.py           # BrainV3Service facade + create_brain_v3()
 ├── phase2_service.py    # BrainV3Phase2Service + create_brain_v3_phase2()
-├── conversation/        # Phase 2 scaffolding (tests; not yet production-wired)
-├── extraction/          # Phase 2 scaffolding (tests; not yet production-wired)
+├── phase3_service.py    # BrainV3Phase3Service + create_brain_v3_phase3()
+├── conversation/        # wired via Phase 2/3 facades
+├── extraction/          # wired via Phase 2/3 facades
+├── recall/              # Phase 3 approved contextual recall
+├── conversational_intelligence/  # Phase 3 answer support
 ├── memory_proposals/    # Phase 2 proposal workflow
 ├── project_intelligence/# Phase 2 project snapshots
 └── ARCHITECTURE.md      # this file
 ```
 
-Phase 2 live path uses heuristic extraction inside `phase2_service.py`.
-`conversation/` and `extraction/` are covered by tests as reusable modules for a
-later wiring sprint; they are not a second persistence path.
+Phase 2/3 live path uses `conversation.build_conversation` +
+`extraction.extract_candidates`. Phase 3 recall is **read-only**,
+**approved-only**, and **non-executable**. Schema remains **v1** (no Phase 3
+DDL); recall filters committed graph rows via `BrainV3Service`.
 
 ## OFF behaviour (fail closed)
 
@@ -262,3 +267,35 @@ Every proposal and suggested next step retains
 - Executable plan steps or agent dispatch
 - Background ingestion
 - LLM-driven graph inference without human approval
+
+## Phase 3 — Conversational intelligence + contextual recall
+
+Status: **Phase 3 modules present**. Default **OFF** via
+`create_brain_v3_phase3(enabled=False)` and `brain_v3_phase3_enabled=false`.
+Still no daemon / engine wiring, no executable steps, no shell / network / Git /
+H authority.
+
+### Additions
+
+```text
+src/jarvis/brain_v3/
+├── phase3_service.py
+├── recall/                      # approved contextual recall (read-only)
+└── conversational_intelligence/ # AnswerSupport (non-executable)
+```
+
+### Behaviour
+
+- `conversation/` + `extraction/` are wired through Phase 2/3 facades.
+- Recall uses only committed graph data via `BrainV3Service` (no direct SQLite).
+- Defaults: `approved_only=true`, `include_inferences=false`,
+  `include_sensitive=false`, `recall_cache_enabled=false`, read-only.
+- Draft / rejected / expired / rolled-back / sensitive / authority-related
+  memories are excluded.
+- Ranking is deterministic with per-item breakdown; contradictions surface as
+  `prohibited_claims` in `AnswerSupport`.
+- **No schema v2** — Phase 3 does not alter DDL; SCHEMA_VERSION remains 1.
+
+### OFF behaviour
+
+`create_brain_v3_phase3(enabled=False)` returns `None` with **zero I/O**.
