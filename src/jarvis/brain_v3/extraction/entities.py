@@ -22,7 +22,10 @@ _INJECTION_PATTERNS = (
 )
 
 _ENTITY_PATTERNS = (
-    re.compile(r"\b(?:component|module|service|person|user)\b[\s:,-]+(?P<value>.{2,120})", re.IGNORECASE),
+    re.compile(
+        r"\b(?:component|module|service|person|user|feature)\b[\s:,-]+(?P<value>.{2,120})",
+        re.IGNORECASE,
+    ),
 )
 
 

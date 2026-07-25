@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Union
 
+from .conversation import build_conversation
 from .errors import ValidationError
+from .extraction import extract_candidates
 from .memory_proposals import (
     ProposalAuditLog,
     ProposalSet,
@@ -26,15 +27,51 @@ from .project_intelligence import ProjectIntelligenceService, ProjectSnapshot
 from .service import BrainV3Service, _resolve_root, create_brain_v3
 
 _PathLike = Union[str, Path]
-_ENTITY_HINT_RE = re.compile(
-    r"\b(project|goal|task|decision|feature|component)\s*[:\\-]?\s*(.+)",
-    re.IGNORECASE | re.UNICODE,
-)
 
 
 def _default_phase2_root(root_dir: Optional[_PathLike]) -> Path:
     """Resolve Phase 2 root with the same rules as create_brain_v3."""
     return _resolve_root(root_dir)
+
+
+def _candidate_to_phase2_dict(cand: Any) -> Dict[str, Any]:
+    """Convert extraction MemoryCandidate into proposal-oriented dict."""
+    if isinstance(cand, Mapping) and cand.get("kind"):
+        return dict(cand)
+    base = cand.to_dict() if hasattr(cand, "to_dict") else dict(cand)
+    ctype = str(base.get("candidate_type") or "entity")
+    display = str(base.get("display_value") or base.get("display_name") or "unnamed")
+    if ctype == "event":
+        return {
+            **base,
+            "kind": "timeline_event",
+            "event_type": "conversation_note",
+            "title": display[:120],
+            "description": display[:500],
+            "confidence_category": "user_stated",
+            "source_reference": "conversation",
+        }
+    entity_type = ctype if ctype in {
+        "person", "project", "component", "decision", "goal", "task",
+        "repository", "branch", "commit", "document", "system", "feature",
+        "environment", "event", "concept",
+    } else "concept"
+    if ctype in {"preference", "constraint"}:
+        entity_type = "concept"
+    return {
+        **base,
+        "kind": "entity",
+        "entity_type": entity_type,
+        "canonical_name": normalize_key(str(base.get("normalized_value") or display)),
+        "display_name": display[:120],
+        "description": display[:500],
+        "confidence_category": "user_stated",
+        "source_reference": "conversation",
+        "attributes": {
+            "is_preference": ctype == "preference",
+            "sensitivity": base.get("sensitivity", "normal"),
+        },
+    }
 
 
 class BrainV3Phase2Service:
@@ -71,7 +108,7 @@ class BrainV3Phase2Service:
     # ── Conversation analysis ─────────────────────────────────────────────
 
     def analyze_conversation(self, conv: Mapping[str, Any]) -> Dict[str, Any]:
-        """Extract structured memory candidates from a conversation payload."""
+        """Extract structured memory candidates via conversation/ + extraction/."""
         if not isinstance(conv, Mapping):
             raise ValidationError("conversation must be a mapping")
 
@@ -79,66 +116,56 @@ class BrainV3Phase2Service:
         if not isinstance(messages, list):
             raise ValidationError("messages must be a list")
 
-        candidates = self.extract_memory_candidates(messages)
+        raw = {
+            "messages": messages,
+            "conversation_id": conv.get("id") or conv.get("conversation_id"),
+            "title": conv.get("title") or "",
+            "source_type": conv.get("source_type") or "conversation",
+        }
+        candidates = self.extract_memory_candidates(raw)
         result = {
             "conversation_id": conv.get("id") or conv.get("conversation_id"),
             "candidate_count": len(candidates),
             "candidates": candidates,
             "dry_run": self.dry_run,
             "approval_required": self.approval_required,
+            "extraction_wired": True,
         }
         self._audit_event("analyze_conversation", {"candidate_count": len(candidates)})
         return result
 
-    def extract_memory_candidates(self, messages: List[Any]) -> List[Dict[str, Any]]:
-        """Heuristic, language-agnostic extraction of entity/event candidates."""
-        candidates: List[Dict[str, Any]] = []
-        source_ref = "conversation"
+    def extract_memory_candidates(self, messages: Any) -> List[Dict[str, Any]]:
+        """Wire conversation.build_conversation + extraction.extract_candidates."""
+        if isinstance(messages, list):
+            raw: Dict[str, Any] = {"messages": messages}
+        elif isinstance(messages, Mapping):
+            raw = dict(messages)
+            if "messages" not in raw and "turns" in raw:
+                raw = {**raw, "messages": raw["turns"]}
+        else:
+            raise ValidationError("messages must be a list or conversation mapping")
 
-        for index, message in enumerate(messages):
+        # Normalize bare strings / alternate keys for conversation builder.
+        normalized_messages: List[Dict[str, Any]] = []
+        for index, message in enumerate(raw.get("messages") or []):
             if isinstance(message, Mapping):
+                content = str(message.get("content") or message.get("text") or "")
                 role = str(message.get("role") or message.get("speaker") or "unknown")
-                text = str(message.get("content") or message.get("text") or "")
+                normalized_messages.append(
+                    {
+                        "role": role,
+                        "content": content,
+                        "sequence_index": int(message.get("sequence_index", index)),
+                        "message_id": str(message.get("message_id") or ""),
+                    }
+                )
             else:
-                role = "unknown"
-                text = str(message)
-
-            text = text.strip()
-            if not text:
-                continue
-
-            for match in _ENTITY_HINT_RE.finditer(text):
-                entity_type = match.group(1).lower()
-                name = match.group(2).strip().split("\n")[0][:120]
-                if len(name) < 2:
-                    continue
-                candidates.append(
-                    {
-                        "kind": "entity",
-                        "entity_type": entity_type,
-                        "canonical_name": normalize_key(name),
-                        "display_name": name,
-                        "description": text[:500],
-                        "confidence_category": "user_stated" if role == "user" else "inferred",
-                        "source_reference": source_ref,
-                        "message_index": index,
-                    }
+                normalized_messages.append(
+                    {"role": "unknown", "content": str(message), "sequence_index": index}
                 )
-
-            if len(text) > 40:
-                candidates.append(
-                    {
-                        "kind": "timeline_event",
-                        "event_type": "conversation_note",
-                        "title": text[:120],
-                        "description": text[:500],
-                        "confidence_category": "user_stated" if role == "user" else "inferred",
-                        "source_reference": source_ref,
-                        "message_index": index,
-                    }
-                )
-
-        return candidates
+        raw["messages"] = normalized_messages
+        conversation = build_conversation(raw)
+        return [_candidate_to_phase2_dict(c) for c in extract_candidates(conversation)]
 
     # ── Project intelligence ──────────────────────────────────────────────
 

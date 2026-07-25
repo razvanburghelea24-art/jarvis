@@ -254,6 +254,25 @@ class Settings:
     brain_v3_phase2_enabled: bool
     brain_v3_extraction_dry_run: bool
     brain_v3_memory_commit_requires_approval: bool
+    # Brain V3 Phase 3 — conversational intelligence + contextual recall.
+    # Default OFF; read-only recall; approved-only; no live engine wiring.
+    brain_v3_phase3_enabled: bool
+    brain_v3_contextual_recall_enabled: bool
+    brain_v3_recall_read_only: bool
+    brain_v3_recall_approved_only: bool
+    brain_v3_recall_include_inferences: bool
+    brain_v3_recall_include_sensitive: bool
+    brain_v3_recall_max_items: int
+    brain_v3_recall_max_entities: int
+    brain_v3_recall_max_relations: int
+    brain_v3_recall_max_timeline_events: int
+    brain_v3_recall_max_sources: int
+    brain_v3_recall_max_characters: int
+    brain_v3_recall_max_tokens: int
+    brain_v3_recall_min_confidence: float
+    brain_v3_recall_max_graph_depth: int
+    brain_v3_recall_timeout_ms: int
+    brain_v3_recall_cache_enabled: bool
 
     # OpenAI Realtime premium voice backend (default off). API key is read
     # only from Windows Credential Manager target ``Cora.OpenAI`` — never from
@@ -640,6 +659,23 @@ def get_default_config() -> Dict[str, Any]:
         "brain_v3_phase2_enabled": False,
         "brain_v3_extraction_dry_run": True,
         "brain_v3_memory_commit_requires_approval": True,
+        "brain_v3_phase3_enabled": False,
+        "brain_v3_contextual_recall_enabled": False,
+        "brain_v3_recall_read_only": True,
+        "brain_v3_recall_approved_only": True,
+        "brain_v3_recall_include_inferences": False,
+        "brain_v3_recall_include_sensitive": False,
+        "brain_v3_recall_max_items": 32,
+        "brain_v3_recall_max_entities": 64,
+        "brain_v3_recall_max_relations": 64,
+        "brain_v3_recall_max_timeline_events": 64,
+        "brain_v3_recall_max_sources": 32,
+        "brain_v3_recall_max_characters": 12000,
+        "brain_v3_recall_max_tokens": 3000,
+        "brain_v3_recall_min_confidence": 0.0,
+        "brain_v3_recall_max_graph_depth": 2,
+        "brain_v3_recall_timeout_ms": 250,
+        "brain_v3_recall_cache_enabled": False,
 
         # OpenAI Realtime premium (off until paid live test)
         "openai_realtime_enabled": False,
@@ -963,6 +999,60 @@ def load_settings() -> Settings:
     brain_v3_memory_commit_requires_approval = _coerce_strict_bool(
         merged.get("brain_v3_memory_commit_requires_approval", True), default=True
     )
+    brain_v3_phase3_enabled = _coerce_strict_bool(
+        merged.get("brain_v3_phase3_enabled", False), default=False
+    )
+    brain_v3_contextual_recall_enabled = _coerce_strict_bool(
+        merged.get("brain_v3_contextual_recall_enabled", False), default=False
+    )
+    brain_v3_recall_read_only = _coerce_strict_bool(
+        merged.get("brain_v3_recall_read_only", True), default=True
+    )
+    brain_v3_recall_approved_only = _coerce_strict_bool(
+        merged.get("brain_v3_recall_approved_only", True), default=True
+    )
+    brain_v3_recall_include_inferences = _coerce_strict_bool(
+        merged.get("brain_v3_recall_include_inferences", False), default=False
+    )
+    brain_v3_recall_include_sensitive = _coerce_strict_bool(
+        merged.get("brain_v3_recall_include_sensitive", False), default=False
+    )
+    brain_v3_recall_cache_enabled = _coerce_strict_bool(
+        merged.get("brain_v3_recall_cache_enabled", False), default=False
+    )
+
+    def _clamp_int(key: str, default: int, lo: int, hi: int) -> int:
+        try:
+            value = int(merged.get(key, default))
+        except (TypeError, ValueError):
+            value = default
+        return max(lo, min(hi, value))
+
+    def _clamp_float(key: str, default: float, lo: float, hi: float) -> float:
+        try:
+            value = float(merged.get(key, default))
+        except (TypeError, ValueError):
+            value = default
+        return max(lo, min(hi, value))
+
+    brain_v3_recall_max_items = _clamp_int("brain_v3_recall_max_items", 32, 1, 256)
+    brain_v3_recall_max_entities = _clamp_int("brain_v3_recall_max_entities", 64, 1, 512)
+    brain_v3_recall_max_relations = _clamp_int("brain_v3_recall_max_relations", 64, 1, 512)
+    brain_v3_recall_max_timeline_events = _clamp_int(
+        "brain_v3_recall_max_timeline_events", 64, 1, 512
+    )
+    brain_v3_recall_max_sources = _clamp_int("brain_v3_recall_max_sources", 32, 1, 256)
+    brain_v3_recall_max_characters = _clamp_int(
+        "brain_v3_recall_max_characters", 12000, 256, 200000
+    )
+    brain_v3_recall_max_tokens = _clamp_int("brain_v3_recall_max_tokens", 3000, 32, 50000)
+    brain_v3_recall_min_confidence = _clamp_float(
+        "brain_v3_recall_min_confidence", 0.0, 0.0, 1.0
+    )
+    brain_v3_recall_max_graph_depth = _clamp_int(
+        "brain_v3_recall_max_graph_depth", 2, 0, 8
+    )
+    brain_v3_recall_timeout_ms = _clamp_int("brain_v3_recall_timeout_ms", 250, 10, 60000)
 
     chat_ui_enabled = bool(merged.get("chat_ui_enabled", False))
     chat_ui_mode = str(merged.get("chat_ui_mode", "classic") or "classic").strip().lower()
@@ -1209,6 +1299,23 @@ def load_settings() -> Settings:
         brain_v3_phase2_enabled=brain_v3_phase2_enabled,
         brain_v3_extraction_dry_run=brain_v3_extraction_dry_run,
         brain_v3_memory_commit_requires_approval=brain_v3_memory_commit_requires_approval,
+        brain_v3_phase3_enabled=brain_v3_phase3_enabled,
+        brain_v3_contextual_recall_enabled=brain_v3_contextual_recall_enabled,
+        brain_v3_recall_read_only=brain_v3_recall_read_only,
+        brain_v3_recall_approved_only=brain_v3_recall_approved_only,
+        brain_v3_recall_include_inferences=brain_v3_recall_include_inferences,
+        brain_v3_recall_include_sensitive=brain_v3_recall_include_sensitive,
+        brain_v3_recall_max_items=brain_v3_recall_max_items,
+        brain_v3_recall_max_entities=brain_v3_recall_max_entities,
+        brain_v3_recall_max_relations=brain_v3_recall_max_relations,
+        brain_v3_recall_max_timeline_events=brain_v3_recall_max_timeline_events,
+        brain_v3_recall_max_sources=brain_v3_recall_max_sources,
+        brain_v3_recall_max_characters=brain_v3_recall_max_characters,
+        brain_v3_recall_max_tokens=brain_v3_recall_max_tokens,
+        brain_v3_recall_min_confidence=brain_v3_recall_min_confidence,
+        brain_v3_recall_max_graph_depth=brain_v3_recall_max_graph_depth,
+        brain_v3_recall_timeout_ms=brain_v3_recall_timeout_ms,
+        brain_v3_recall_cache_enabled=brain_v3_recall_cache_enabled,
 
         chat_ui_enabled=chat_ui_enabled,
         chat_ui_mode=chat_ui_mode,
