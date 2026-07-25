@@ -1,5 +1,5 @@
-<#
-    Jarvis launcher — hardened, venv-based.
+﻿<#
+    Jarvis launcher - hardened, venv-based.
 
     Differences from the upstream scripts/run_desktop_app.bat:
       * Uses .venv (Python 3.12) instead of .mamba_env.
@@ -54,7 +54,7 @@ if (-not (Get-Process ollama -ErrorAction SilentlyContinue)) {
         Start-Process -FilePath $OLLAMA_EXE -ArgumentList 'serve' -WindowStyle Hidden
         Start-Sleep -Seconds 3
     } else {
-        Write-Warn "Ollama not found at $OLLAMA_EXE — Jarvis will fail to reach the LLM."
+        Write-Warn "Ollama not found at $OLLAMA_EXE - Jarvis will fail to reach the LLM."
     }
 }
 
@@ -69,7 +69,7 @@ if ($Daemon) {
     Write-Info 'Starting voice daemon (Ctrl+C to quit)...'
     & $VENV_PY -m jarvis.daemon
 } else {
-    Write-Info 'Starting desktop app — look for the tray icon, then "Start Listening".'
+    Write-Info 'Starting desktop app - look for the tray icon, then Start Listening.'
     & $VENV_PY -m desktop_app
 }
 
