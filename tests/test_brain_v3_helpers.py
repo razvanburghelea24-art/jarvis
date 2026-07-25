@@ -141,6 +141,11 @@ def phase2_root(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
+def phase3_root(tmp_path: Path) -> Path:
+    return tmp_path / "memory" / "brain_v3"
+
+
+@pytest.fixture
 def phase2(phase2_root: Path):
     from jarvis.brain_v3.phase2_service import create_brain_v3_phase2
 

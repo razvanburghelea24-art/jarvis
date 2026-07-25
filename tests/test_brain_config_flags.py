@@ -34,10 +34,27 @@ BRAIN_BOOL_DEFAULTS = {
     "brain_v3_phase2_enabled": False,
     "brain_v3_extraction_dry_run": True,
     "brain_v3_memory_commit_requires_approval": True,
+    "brain_v3_phase3_enabled": False,
+    "brain_v3_contextual_recall_enabled": False,
+    "brain_v3_recall_read_only": True,
+    "brain_v3_recall_approved_only": True,
+    "brain_v3_recall_include_inferences": False,
+    "brain_v3_recall_include_sensitive": False,
+    "brain_v3_recall_cache_enabled": False,
 }
 BRAIN_OTHER_DEFAULTS = {
     "owner_profile_max_chars": 600,
     "development_agent_provider": "disabled",
+    "brain_v3_recall_max_items": 32,
+    "brain_v3_recall_max_entities": 64,
+    "brain_v3_recall_max_relations": 64,
+    "brain_v3_recall_max_timeline_events": 64,
+    "brain_v3_recall_max_sources": 32,
+    "brain_v3_recall_max_characters": 12000,
+    "brain_v3_recall_max_tokens": 3000,
+    "brain_v3_recall_min_confidence": 0.0,
+    "brain_v3_recall_max_graph_depth": 2,
+    "brain_v3_recall_timeout_ms": 250,
 }
 
 
@@ -86,6 +103,10 @@ def test_flags_round_trip_when_enabled(tmp_path, monkeypatch):
         "brain_v3_phase2_enabled": True,
         "brain_v3_extraction_dry_run": False,
         "brain_v3_memory_commit_requires_approval": False,
+        "brain_v3_phase3_enabled": True,
+        "brain_v3_contextual_recall_enabled": True,
+        "brain_v3_recall_include_inferences": True,
+        "brain_v3_recall_cache_enabled": True,
         "owner_profile_max_chars": 800,
         "development_agent_provider": "claude_cli",
     }
