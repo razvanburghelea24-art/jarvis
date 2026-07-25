@@ -1532,6 +1532,32 @@ def run_reply_engine(db: "Database", cfg, tts: Optional[Any],
             except Exception as e:
                 debug_log(f"graph enrichment failed: {e}", "memory")
 
+    # Step 4b2: Brain V3 Phase 3 approved-memory recall (live chat wiring).
+    # Completely gated by brain_v3_live_chat_wiring_enabled (+ Phase 3 flags).
+    # When OFF: zero Brain V3 I/O. Failures never block chat generation.
+    approved_memory_context = ""
+    try:
+        from ..brain_v3.live_chat import maybe_build_approved_memory_context
+
+        _v3_block, _v3_diag = maybe_build_approved_memory_context(redacted, cfg)
+        if _v3_block:
+            approved_memory_context = _v3_block
+            print(
+                "  🧠 Brain V3 recall: "
+                f"{_v3_diag.get('selected_item_count', 0)} selected / "
+                f"{_v3_diag.get('excluded_item_count', 0)} excluded "
+                f"({_v3_diag.get('latency_ms', 0)} ms)",
+                flush=True,
+            )
+        elif _v3_diag.get("recall_attempted"):
+            debug_log(
+                "brain_v3 live recall skipped: "
+                f"{_v3_diag.get('reason_skipped') or _v3_diag.get('error_category')}",
+                "memory",
+            )
+    except Exception as e:
+        debug_log(f"brain_v3 live recall failed: {type(e).__name__}", "memory")
+
     # Step 4c: Memory digest for small models.
     #
     # Small models (~2B) degrade sharply as the system prompt grows, and the
@@ -1778,6 +1804,9 @@ def run_reply_engine(db: "Database", cfg, tts: Optional[Any],
 
         if graph_context:
             guidance.append("\n" + graph_context)
+
+        if approved_memory_context:
+            guidance.append("\n" + approved_memory_context)
 
         if memory_digest_text:
             # Distilled, relevance-filtered note used in place of raw

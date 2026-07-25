@@ -273,6 +273,9 @@ class Settings:
     brain_v3_recall_max_graph_depth: int
     brain_v3_recall_timeout_ms: int
     brain_v3_recall_cache_enabled: bool
+    # Live Modern Chat wiring for Phase 3 recall. Default OFF — zero I/O
+    # until an explicit local-test (or future) profile opts in.
+    brain_v3_live_chat_wiring_enabled: bool
 
     # OpenAI Realtime premium voice backend (default off). API key is read
     # only from Windows Credential Manager target ``Cora.OpenAI`` — never from
@@ -676,6 +679,7 @@ def get_default_config() -> Dict[str, Any]:
         "brain_v3_recall_max_graph_depth": 2,
         "brain_v3_recall_timeout_ms": 250,
         "brain_v3_recall_cache_enabled": False,
+        "brain_v3_live_chat_wiring_enabled": False,
 
         # OpenAI Realtime premium (off until paid live test)
         "openai_realtime_enabled": False,
@@ -1020,6 +1024,9 @@ def load_settings() -> Settings:
     brain_v3_recall_cache_enabled = _coerce_strict_bool(
         merged.get("brain_v3_recall_cache_enabled", False), default=False
     )
+    brain_v3_live_chat_wiring_enabled = _coerce_strict_bool(
+        merged.get("brain_v3_live_chat_wiring_enabled", False), default=False
+    )
 
     def _clamp_int(key: str, default: int, lo: int, hi: int) -> int:
         try:
@@ -1316,6 +1323,7 @@ def load_settings() -> Settings:
         brain_v3_recall_max_graph_depth=brain_v3_recall_max_graph_depth,
         brain_v3_recall_timeout_ms=brain_v3_recall_timeout_ms,
         brain_v3_recall_cache_enabled=brain_v3_recall_cache_enabled,
+        brain_v3_live_chat_wiring_enabled=brain_v3_live_chat_wiring_enabled,
 
         chat_ui_enabled=chat_ui_enabled,
         chat_ui_mode=chat_ui_mode,

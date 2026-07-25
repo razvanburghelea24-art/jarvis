@@ -41,6 +41,7 @@ BRAIN_BOOL_DEFAULTS = {
     "brain_v3_recall_include_inferences": False,
     "brain_v3_recall_include_sensitive": False,
     "brain_v3_recall_cache_enabled": False,
+    "brain_v3_live_chat_wiring_enabled": False,
 }
 BRAIN_OTHER_DEFAULTS = {
     "owner_profile_max_chars": 600,
@@ -107,6 +108,7 @@ def test_flags_round_trip_when_enabled(tmp_path, monkeypatch):
         "brain_v3_contextual_recall_enabled": True,
         "brain_v3_recall_include_inferences": True,
         "brain_v3_recall_cache_enabled": True,
+        "brain_v3_live_chat_wiring_enabled": True,
         "owner_profile_max_chars": 800,
         "development_agent_provider": "claude_cli",
     }
