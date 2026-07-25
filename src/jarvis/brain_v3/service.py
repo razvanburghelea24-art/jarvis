@@ -157,6 +157,13 @@ class BrainV3Service:
             self._note_error(exc)
             raise
 
+    def remove_relation(self, relation_id: str) -> Relation:
+        try:
+            return self._graph.remove_relation(relation_id)
+        except BrainV3Error as exc:
+            self._note_error(exc)
+            raise
+
     def get_neighbors(
         self,
         entity_id: str,

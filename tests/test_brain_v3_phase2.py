@@ -235,6 +235,20 @@ def test_phase2_disabled_no_audit_or_db(tmp_path):
     assert not root.exists()
 
 
+def test_phase2_root_matches_phase1_config_env(tmp_path, monkeypatch):
+    """Phase 1 and Phase 2 factories must share JARVIS_CONFIG_PATH root resolution."""
+    cfg = tmp_path / "cfg" / "config.json"
+    cfg.parent.mkdir(parents=True)
+    cfg.write_text("{}", encoding="utf-8")
+    monkeypatch.setenv("JARVIS_CONFIG_PATH", str(cfg))
+    from jarvis.brain_v3.phase2_service import _default_phase2_root
+    from jarvis.brain_v3.service import _resolve_root
+
+    assert _default_phase2_root(None) == _resolve_root(None)
+    expected = (tmp_path / "cfg" / "memory" / "brain_v3").resolve()
+    assert _resolve_root(None) == expected
+
+
 def test_phase2_diagnostics_when_enabled(phase2):
     diag = phase2.get_diagnostics()
     assert diag["phase"] == 2

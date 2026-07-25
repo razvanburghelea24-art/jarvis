@@ -21,12 +21,11 @@ from .memory_proposals import (
     rollback_proposal,
 )
 from .memory_proposals.models import MemoryProposal
-from .models import content_hash, new_id, normalize_key, utc_now_iso
+from .models import normalize_key
 from .project_intelligence import ProjectIntelligenceService, ProjectSnapshot
-from .service import BrainV3Service, create_brain_v3
+from .service import BrainV3Service, _resolve_root, create_brain_v3
 
 _PathLike = Union[str, Path]
-_SENTENCE_RE = re.compile(r"[^.!?;\n]+[.!?;]?", re.UNICODE)
 _ENTITY_HINT_RE = re.compile(
     r"\b(project|goal|task|decision|feature|component)\s*[:\\-]?\s*(.+)",
     re.IGNORECASE | re.UNICODE,
@@ -34,9 +33,8 @@ _ENTITY_HINT_RE = re.compile(
 
 
 def _default_phase2_root(root_dir: Optional[_PathLike]) -> Path:
-    if root_dir is None:
-        return Path.home() / ".config" / "jarvis" / "memory" / "brain_v3"
-    return Path(root_dir).expanduser().resolve()
+    """Resolve Phase 2 root with the same rules as create_brain_v3."""
+    return _resolve_root(root_dir)
 
 
 class BrainV3Phase2Service:

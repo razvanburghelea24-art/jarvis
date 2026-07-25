@@ -23,14 +23,17 @@ does **not** auto-migrate Brain V2 data or modify Brain V2 when Brain V3 is OFF.
 
 ## Package layout
 
+Public package exports (`__all__`): `BrainV3Service`, `BrainV3Phase2Service`,
+`create_brain_v3`, `create_brain_v3_phase2`.
+
 ```
 src/jarvis/brain_v3/
-├── __init__.py          # BrainV3Service, create_brain_v3
+├── __init__.py          # public exports above
 ├── config.py            # SCHEMA_VERSION, BrainV3Config
 ├── models.py            # Entity, Relation, TimelineEvent, Plan, SourceRecord
 ├── schema.py            # SQLite DDL (version 1)
 ├── migrations.py        # migrate(), verify_schema(), backup_db_file()
-├── repository.py        # BrainV3Repository (thread-safe SQLite)
+├── repository.py        # BrainV3Repository (thread-safe SQLite; sole sqlite3.connect)
 ├── graph.py             # GraphService
 ├── timeline.py          # TimelineService
 ├── retrieval.py         # retrieve_context() (read-only)
@@ -43,10 +46,16 @@ src/jarvis/brain_v3/
 ├── diagnostics.py       # gather_diagnostics()
 ├── service.py           # BrainV3Service facade + create_brain_v3()
 ├── phase2_service.py    # BrainV3Phase2Service + create_brain_v3_phase2()
+├── conversation/        # Phase 2 scaffolding (tests; not yet production-wired)
+├── extraction/          # Phase 2 scaffolding (tests; not yet production-wired)
 ├── memory_proposals/    # Phase 2 proposal workflow
 ├── project_intelligence/# Phase 2 project snapshots
 └── ARCHITECTURE.md      # this file
 ```
+
+Phase 2 live path uses heuristic extraction inside `phase2_service.py`.
+`conversation/` and `extraction/` are covered by tests as reusable modules for a
+later wiring sprint; they are not a second persistence path.
 
 ## OFF behaviour (fail closed)
 
@@ -203,11 +212,13 @@ no executable steps, no shell / network / Git authority.
 ```text
 src/jarvis/brain_v3/
 ├── phase2_service.py           # BrainV3Phase2Service + create_brain_v3_phase2()
+├── conversation/               # scaffolding (validators / normalisation; test-covered)
+├── extraction/                 # scaffolding (pipeline helpers; test-covered)
 ├── memory_proposals/
 │   ├── models.py               # MemoryProposal, ProposalSet (approval-bound hash)
 │   ├── diff.py                 # build_diff(before, after)
 │   ├── approval.py             # approve / reject / expiry (one-time token)
-│   ├── commit.py               # commit_proposal / rollback_proposal
+│   ├── commit.py               # commit_proposal / rollback_proposal via BrainV3Service
 │   └── audit.py                # append-only JSONL under phase2/
 └── project_intelligence/
     ├── state.py                # ProjectSnapshot
@@ -216,8 +227,11 @@ src/jarvis/brain_v3/
     ├── blockers.py             # blocker detection (non-executable)
     ├── next_steps.py           # suggested steps (requires_approval, execution_forbidden)
     ├── summary.py              # verified / user_stated / assistant_suggested / …
-    └── service.py                # ProjectIntelligenceService (read-mostly)
+    └── service.py              # ProjectIntelligenceService (read-mostly)
 ```
+
+`create_brain_v3_phase2` shares root resolution with `create_brain_v3`
+(`JARVIS_CONFIG_PATH` / `XDG_CONFIG_HOME` / `~/.config/jarvis`).
 
 ### OFF behaviour
 

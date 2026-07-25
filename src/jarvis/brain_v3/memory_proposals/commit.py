@@ -35,7 +35,7 @@ def _rollback_created(service: "BrainV3Service", rollback_data: Dict[str, Any]) 
             pass
     for relation_id in reversed(rollback_data.get("relation_ids") or []):
         try:
-            service._graph.remove_relation(relation_id)
+            service.remove_relation(relation_id)
         except Exception:
             pass
 

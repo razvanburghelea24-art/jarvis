@@ -323,7 +323,7 @@ def test_create_relation_unknown_entity_raises(brain):
 
 def test_remove_relation_archives(brain):
     left, right, rel = seed_pair(brain)
-    archived = brain._graph.remove_relation(rel.id)
+    archived = brain.remove_relation(rel.id)
     assert archived.status == "archived"
 
 
