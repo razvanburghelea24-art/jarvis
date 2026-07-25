@@ -38,7 +38,13 @@ if (-not (Test-Path $VENV_PY)) {
 
 Set-Location $REPO_ROOT
 $env:PYTHONPATH = Join-Path $REPO_ROOT 'src'
+$env:PYTHONUTF8 = '1'
 $env:JARVIS_VOICE_DEBUG = if ($VoiceDebug) { '1' } else { '0' }
+# Modern Chat needs the daemon in-process so cfg/db/DialogueMemory are reachable.
+# Without this flag, desktop_app starts a subprocess daemon and Chat freezes/disconnects.
+if (-not $Daemon) {
+    $env:JARVIS_INPROCESS_DAEMON = '1'
+}
 
 if ($Update) {
     Write-Warn 'Updating from source. Review the diff before trusting it:'
