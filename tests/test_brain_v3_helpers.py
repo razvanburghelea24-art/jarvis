@@ -10,7 +10,7 @@ import pytest
 
 from jarvis.brain_v3 import create_brain_v3
 from jarvis.brain_v3.limits import BrainV3Limits
-from jarvis.brain_v3.models import ENTITY_TYPES, RELATION_TYPES, new_id
+from jarvis.brain_v3.models import ENTITY_TYPES, RELATION_TYPES, new_id, normalize_key
 from jarvis.memory.brain_v2 import create_brain_memory_v2
 
 
@@ -130,3 +130,86 @@ def tiny_limits(**overrides: int) -> BrainV3Limits:
 
 ALL_ENTITY_TYPES = sorted(ENTITY_TYPES)
 ALL_RELATION_TYPES = sorted(RELATION_TYPES)
+
+
+# ── Phase 2 helpers ───────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def phase2_root(tmp_path: Path) -> Path:
+    return tmp_path / "memory" / "brain_v3"
+
+
+@pytest.fixture
+def phase2(phase2_root: Path):
+    from jarvis.brain_v3.phase2_service import create_brain_v3_phase2
+
+    svc = create_brain_v3_phase2(enabled=True, root_dir=phase2_root, dry_run=True)
+    assert svc is not None
+    try:
+        yield svc
+    finally:
+        if svc.brain_v3 is not None:
+            svc.brain_v3.close()
+
+
+@pytest.fixture
+def phase2_commit(phase2_root: Path):
+    from jarvis.brain_v3.phase2_service import create_brain_v3_phase2
+
+    svc = create_brain_v3_phase2(
+        enabled=True, root_dir=phase2_root, dry_run=False, approval_required=True
+    )
+    assert svc is not None
+    try:
+        yield svc
+    finally:
+        if svc.brain_v3 is not None:
+            svc.brain_v3.close()
+
+
+def raw_conversation(*messages: dict, **extra: Any) -> Dict[str, Any]:
+    return {"messages": list(messages), **extra}
+
+
+def conv_msg(role: str, content: str, **extra: Any) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {"role": role, "content": content}
+    payload.update(extra)
+    return payload
+
+
+def entity_candidate(
+    *,
+    entity_type: str = "concept",
+    name: str = "test entity",
+    **extra: Any,
+) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {
+        "kind": "entity",
+        "entity_type": entity_type,
+        "canonical_name": normalize_key(name),
+        "display_name": name,
+        "description": f"Candidate for {name}",
+        "confidence_category": "user_stated",
+        "source_reference": "test",
+    }
+    payload.update(extra)
+    return payload
+
+
+def timeline_candidate(*, title: str = "Event note", **extra: Any) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {
+        "kind": "timeline_event",
+        "event_type": "conversation_note",
+        "title": title,
+        "description": title,
+        "source_reference": "test",
+    }
+    payload.update(extra)
+    return payload
+
+
+def approve_and_get_token(proposal) -> str:
+    from jarvis.brain_v3.memory_proposals import generate_approval_token
+
+    return generate_approval_token(proposal)
