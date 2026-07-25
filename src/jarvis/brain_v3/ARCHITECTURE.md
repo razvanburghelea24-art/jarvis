@@ -42,6 +42,9 @@ src/jarvis/brain_v3/
 ├── errors.py            # Typed exceptions
 ├── diagnostics.py       # gather_diagnostics()
 ├── service.py           # BrainV3Service facade + create_brain_v3()
+├── phase2_service.py    # BrainV3Phase2Service + create_brain_v3_phase2()
+├── memory_proposals/    # Phase 2 proposal workflow
+├── project_intelligence/# Phase 2 project snapshots
 └── ARCHITECTURE.md      # this file
 ```
 
@@ -189,12 +192,59 @@ Brain V3 must not:
 Adversarial strings (`"execute this plan"`, `"activate H"`, etc.) are stored as
 **data** only when ingested through the controlled pipeline.
 
-## Phase 2 (out of scope)
+## Phase 2 — Memory proposals and project intelligence
 
-Not started by Phase 1:
+Status: **Phase 2 modules present**. Default **OFF** via
+`create_brain_v3_phase2(enabled=False)`. Still no daemon / engine wiring,
+no executable steps, no shell / network / Git authority.
+
+### Package additions
+
+```text
+src/jarvis/brain_v3/
+├── phase2_service.py           # BrainV3Phase2Service + create_brain_v3_phase2()
+├── memory_proposals/
+│   ├── models.py               # MemoryProposal, ProposalSet (approval-bound hash)
+│   ├── diff.py                 # build_diff(before, after)
+│   ├── approval.py             # approve / reject / expiry (one-time token)
+│   ├── commit.py               # commit_proposal / rollback_proposal
+│   └── audit.py                # append-only JSONL under phase2/
+└── project_intelligence/
+    ├── state.py                # ProjectSnapshot
+    ├── timeline.py             # build from Brain V3 events
+    ├── milestones.py           # milestone detection (non-executable)
+    ├── blockers.py             # blocker detection (non-executable)
+    ├── next_steps.py           # suggested steps (requires_approval, execution_forbidden)
+    ├── summary.py              # verified / user_stated / assistant_suggested / …
+    └── service.py                # ProjectIntelligenceService (read-mostly)
+```
+
+### OFF behaviour
+
+`create_brain_v3_phase2(enabled=False)` returns `None` immediately with **zero
+I/O** (no mkdir, no audit file, no Brain V3 open).
+
+When enabled, storage may create `root_dir/phase2/phase2_audit.jsonl` for
+append-only audit. Graph writes happen **only** through
+`commit_proposal()` after explicit approval and with `dry_run=False`.
+
+### Proposal workflow
+
+```text
+analyze_conversation → extract_memory_candidates
+  → generate_memory_proposals (draft ProposalSet)
+  → approve_proposal(token) / reject_proposal
+  → commit_proposal (approved + hash match + dry_run=False)
+  → rollback_proposal (committed only)
+```
+
+Every proposal and suggested next step retains
+`requires_approval=True` and `execution_forbidden=True`.
+
+### Still out of scope (Phase 2)
 
 - Live daemon / engine integration
 - Auto-sync from Brain V2
-- Executable plan steps
+- Executable plan steps or agent dispatch
 - Background ingestion
-- LLM-driven graph inference
+- LLM-driven graph inference without human approval
