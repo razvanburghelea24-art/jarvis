@@ -357,6 +357,16 @@ def _build_field_metadata() -> List[FieldMeta]:
       "Enable Brain V3 graph/timeline/retrieval/planner (non-executable). "
       "Default off — no live I/O until explicitly enabled.",
       "memory", "bool")
+    f("brain_v3_phase2_enabled", "Brain V3 Phase 2 conversational memory",
+      "Enable conversation extraction and project intelligence (approval-gated). "
+      "Default off.",
+      "memory", "bool")
+    f("brain_v3_extraction_dry_run", "Brain V3 Phase 2 dry-run extraction",
+      "When on, extraction never auto-commits memory. Default on.",
+      "memory", "bool")
+    f("brain_v3_memory_commit_requires_approval", "Brain V3 Phase 2 approval gate",
+      "Require explicit approval before committing memory proposals. Default on.",
+      "memory", "bool")
 
     # --- Location ---
     f("location_enabled", "Enable Location",

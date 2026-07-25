@@ -31,6 +31,9 @@ BRAIN_BOOL_DEFAULTS = {
     "audit_panel_enabled": False,
     "brain_memory_v2_enabled": False,
     "brain_v3_enabled": False,
+    "brain_v3_phase2_enabled": False,
+    "brain_v3_extraction_dry_run": True,
+    "brain_v3_memory_commit_requires_approval": True,
 }
 BRAIN_OTHER_DEFAULTS = {
     "owner_profile_max_chars": 600,
@@ -80,13 +83,16 @@ def test_flags_round_trip_when_enabled(tmp_path, monkeypatch):
         "audit_panel_enabled": True,
         "brain_memory_v2_enabled": True,
         "brain_v3_enabled": True,
+        "brain_v3_phase2_enabled": True,
+        "brain_v3_extraction_dry_run": False,
+        "brain_v3_memory_commit_requires_approval": False,
         "owner_profile_max_chars": 800,
         "development_agent_provider": "claude_cli",
     }
     s = _load_with(tmp_path, monkeypatch, cfg)
-    for k in cfg:
-        if isinstance(cfg[k], bool):
-            assert getattr(s, k) is True
+    for k, v in cfg.items():
+        if isinstance(v, bool):
+            assert getattr(s, k) is v, f"{k}: got {getattr(s, k)!r} expected {v!r}"
     assert s.owner_profile_max_chars == 800
     assert s.development_agent_provider == "claude_cli"
 

@@ -249,6 +249,11 @@ class Settings:
     # Brain V3 — cognitive graph/timeline/retrieval/planner layer over Brain V2.
     # Default OFF; zero I/O until an explicit integration step opts in.
     brain_v3_enabled: bool
+    # Brain V3 Phase 2 — conversational extraction + project intelligence.
+    # Default OFF; approval-gated; dry-run extraction by default.
+    brain_v3_phase2_enabled: bool
+    brain_v3_extraction_dry_run: bool
+    brain_v3_memory_commit_requires_approval: bool
 
     # OpenAI Realtime premium voice backend (default off). API key is read
     # only from Windows Credential Manager target ``Cora.OpenAI`` — never from
@@ -632,6 +637,9 @@ def get_default_config() -> Dict[str, Any]:
         "audit_panel_enabled": False,
         "brain_memory_v2_enabled": False,
         "brain_v3_enabled": False,
+        "brain_v3_phase2_enabled": False,
+        "brain_v3_extraction_dry_run": True,
+        "brain_v3_memory_commit_requires_approval": True,
 
         # OpenAI Realtime premium (off until paid live test)
         "openai_realtime_enabled": False,
@@ -946,6 +954,15 @@ def load_settings() -> Settings:
     brain_v3_enabled = _coerce_strict_bool(
         merged.get("brain_v3_enabled", False), default=False
     )
+    brain_v3_phase2_enabled = _coerce_strict_bool(
+        merged.get("brain_v3_phase2_enabled", False), default=False
+    )
+    brain_v3_extraction_dry_run = _coerce_strict_bool(
+        merged.get("brain_v3_extraction_dry_run", True), default=True
+    )
+    brain_v3_memory_commit_requires_approval = _coerce_strict_bool(
+        merged.get("brain_v3_memory_commit_requires_approval", True), default=True
+    )
 
     chat_ui_enabled = bool(merged.get("chat_ui_enabled", False))
     chat_ui_mode = str(merged.get("chat_ui_mode", "classic") or "classic").strip().lower()
@@ -1189,6 +1206,9 @@ def load_settings() -> Settings:
         audit_panel_enabled=audit_panel_enabled,
         brain_memory_v2_enabled=brain_memory_v2_enabled,
         brain_v3_enabled=brain_v3_enabled,
+        brain_v3_phase2_enabled=brain_v3_phase2_enabled,
+        brain_v3_extraction_dry_run=brain_v3_extraction_dry_run,
+        brain_v3_memory_commit_requires_approval=brain_v3_memory_commit_requires_approval,
 
         chat_ui_enabled=chat_ui_enabled,
         chat_ui_mode=chat_ui_mode,
