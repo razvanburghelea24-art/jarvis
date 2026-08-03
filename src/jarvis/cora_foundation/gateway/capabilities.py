@@ -27,6 +27,14 @@ DEFAULT_CAPABILITIES: tuple[CapabilitySpec, ...] = (
     CapabilitySpec("Memory.read", RiskLevel.READ, "Read Memory SSOT"),
     CapabilitySpec("Memory.write", RiskLevel.OWNER_CONFIRM, "Write Memory SSOT"),
     CapabilitySpec("Identity.whoami", RiskLevel.READ, "Identity snapshot"),
+    CapabilitySpec("Computer.observe", RiskLevel.READ, "Desktop observability (no control)"),
+    CapabilitySpec("Computer.click", RiskLevel.CRITICAL, "Mouse click (6B assisted)"),
+    CapabilitySpec("Computer.type_keys", RiskLevel.CRITICAL, "Keyboard injection (6B assisted)"),
+    CapabilitySpec("Computer.move_mouse", RiskLevel.CRITICAL, "Mouse move (6B assisted)"),
+    CapabilitySpec("Computer.open_app", RiskLevel.CRITICAL, "Open application (6B assisted)"),
+    CapabilitySpec("Computer.close_app", RiskLevel.CRITICAL, "Close application (6B assisted)"),
+    CapabilitySpec("Computer.write_clipboard", RiskLevel.OWNER_CONFIRM, "Clipboard write (6B)"),
+    CapabilitySpec("Computer.execute_preview", RiskLevel.CRITICAL, "Execute approved Action Preview (6B)"),
 )
 
 

@@ -20,6 +20,7 @@ _READ_DIAGNOSTIC = frozenset(
         "Memory.read",
         "OwnerProfile.read",
         "Workspace.scan",
+        "Computer.observe",
     }
 )
 
@@ -32,6 +33,14 @@ _EXTERNAL_WRITE = frozenset(
         "Server.restart",
         "OwnerProfile.write",
         "Memory.write",
+        "Computer.click",
+        "Computer.type_keys",
+        "Computer.move_mouse",
+        "Computer.open_app",
+        "Computer.close_app",
+        "Computer.write_clipboard",
+        "Computer.automate",
+        "Computer.execute_preview",
     }
 )
 
