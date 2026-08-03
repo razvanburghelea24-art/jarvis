@@ -12,6 +12,7 @@ from .types import AgentRole
 
 class TaskStatus(str, Enum):
     PENDING = "PENDING"
+    WAITING = "WAITING"  # waiting on approval / external gate
     READY = "READY"
     RUNNING = "RUNNING"
     COMPLETED = "COMPLETED"
@@ -36,6 +37,14 @@ class TaskNode:
     status: TaskStatus = TaskStatus.PENDING
     result_id: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    # Orchestrator-owned scheduling fields (Planner still creates the node)
+    retry_count: int = 0
+    max_retry: int = 2
+    backoff_s: float = 0.0
+    failure_reason: str | None = None
+    requires_owner_approval: bool = False
+    owner_approved: bool = False
+    blocked_reason: str | None = None
 
     def to_public_dict(self) -> dict[str, Any]:
         return {
@@ -49,6 +58,13 @@ class TaskNode:
             "status": self.status.value,
             "result_id": self.result_id,
             "metadata": dict(self.metadata),
+            "retry_count": self.retry_count,
+            "max_retry": self.max_retry,
+            "backoff_s": self.backoff_s,
+            "failure_reason": self.failure_reason,
+            "requires_owner_approval": self.requires_owner_approval,
+            "owner_approved": self.owner_approved,
+            "blocked_reason": self.blocked_reason,
         }
 
 
