@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import time
 import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
 from ..identity import IdentityService
-from ..memory import MemoryEngine
+from ..memory import MemoryEngine, MemoryKind
 from .audit_hooks import AuditJournal
 from .capabilities import CapabilityRegistry
 from .dispatcher import CapabilityDispatcher, DispatchResult
@@ -91,31 +92,88 @@ class CommandPipeline:
         self._identity = identity
         self._memory = memory
 
+    def _ctx(
+        self,
+        *,
+        owner_id: str | None = None,
+        session_id: str | None = None,
+        workspace_id: str | None = None,
+        intent_id: str | None = None,
+        source: str | None = None,
+        risk_level: str | None = None,
+    ) -> dict[str, Any]:
+        return {
+            "owner_id": owner_id,
+            "session_id": session_id,
+            "workspace_id": workspace_id,
+            "intent_id": intent_id,
+            "source": source,
+            "risk_level": risk_level,
+        }
+
     def run(self, envelope: CommandEnvelope, *, enabled: bool) -> PipelineResult:
+        started = time.perf_counter()
         command_id = f"cmd_{uuid.uuid4().hex}"
         result = PipelineResult(command_id=command_id, enabled=enabled)
         result.stages_completed.append("input")
 
-        # Always emit received when pipeline starts (even if gateway disabled later).
-        self._audit.emit(AuditJournal.REQUEST_RECEIVED, command_id, source=envelope.source.value)
+        source = envelope.source.value
+        owner_id: str | None = None
+        session_id: str | None = None
+        workspace_id: str | None = None
+        intent_id: str | None = None
+
+        self._audit.emit(
+            AuditJournal.REQUEST_RECEIVED,
+            command_id,
+            source=source,
+            status="received",
+            metadata={"text_len": len(envelope.text or "")},
+        )
 
         try:
             # normalize
             result.normalized = normalize_command(envelope)
             result.stages_completed.append("normalize")
+            self._audit.emit(
+                AuditJournal.REQUEST_NORMALIZED,
+                command_id,
+                source=source,
+                status="normalized",
+                metadata={"normalized_len": len(result.normalized.text)},
+            )
 
             if not enabled:
-                # Still complete remaining stages with inert outcomes — no skip.
                 result.identity_context = {"enabled": False}
                 result.stages_completed.append("identity")
+                self._audit.emit(AuditJournal.IDENTITY_RESOLVED, command_id, source=source, status="skipped")
                 result.memory_context = {"enabled": False}
                 result.stages_completed.append("memory_context")
+                self._audit.emit(AuditJournal.MEMORY_RESOLVED, command_id, source=source, status="skipped")
                 result.intent = self._intent.detect(
                     result.normalized, owner_id=None, workspace_id=None, session_id=None
                 )
+                intent_id = result.intent.intent_id
                 result.stages_completed.append("intent_detection")
+                self._audit.emit(
+                    AuditJournal.INTENT_CLASSIFIED,
+                    command_id,
+                    source=source,
+                    intent_id=intent_id,
+                    risk_level=result.intent.risk_level.value,
+                    status="classified",
+                    metadata={"type": result.intent.type},
+                )
                 result.policy = PolicyDecision(PolicyDecisionKind.DENIED, "gateway disabled")
                 result.stages_completed.append("policy_check")
+                self._audit.emit(
+                    AuditJournal.POLICY_EVALUATED,
+                    command_id,
+                    source=source,
+                    intent_id=intent_id,
+                    status=result.policy.kind.value,
+                    metadata={"reason": result.policy.reason},
+                )
                 result.missing_capabilities = []
                 result.stages_completed.append("capability_lookup")
                 result.plan = ExecutionPlan(
@@ -126,22 +184,32 @@ class CommandPipeline:
                     blocked_reason="gateway disabled",
                 )
                 result.stages_completed.append("execution_plan")
+                self._audit.emit(
+                    AuditJournal.PLAN_CREATED,
+                    command_id,
+                    source=source,
+                    intent_id=intent_id,
+                    status="blocked",
+                    metadata={"blocked_reason": "gateway disabled"},
+                )
                 result.dispatch_results = []
                 result.stages_completed.append("dispatch")
+                dur = (time.perf_counter() - started) * 1000.0
                 self._audit.emit(
                     AuditJournal.REQUEST_FAILED,
                     command_id,
-                    reason="gateway disabled",
+                    source=source,
+                    intent_id=intent_id,
+                    status="failed",
+                    duration_ms=dur,
+                    metadata={"reason": "gateway disabled"},
                 )
                 result.stages_completed.append("audit")
                 result.response = {"ok": False, "reason": "gateway disabled"}
                 result.stages_completed.append("response")
                 return result
 
-            # identity (consume Identity service — do not duplicate)
-            owner_id = None
-            session_id = None
-            workspace_id = None
+            # identity
             runtime_safe = False
             runtime_estop = False
             identity_enabled = False
@@ -168,23 +236,39 @@ class CommandPipeline:
             else:
                 result.identity_context = {"enabled": False, "bound": False}
             result.stages_completed.append("identity")
+            self._audit.emit(
+                AuditJournal.IDENTITY_RESOLVED,
+                command_id,
+                source=source,
+                owner_id=owner_id,
+                session_id=session_id,
+                workspace_id=workspace_id,
+                status="resolved",
+                metadata={"identity_enabled": identity_enabled},
+            )
 
-            # memory context (consume Memory — do not duplicate)
+            # memory
             if self._memory is not None and self._memory.enabled:
                 mem_snap = self._memory.snapshot()
                 result.memory_context = {
                     "enabled": True,
                     "revision": mem_snap.get("revision"),
                     "record_count": mem_snap.get("record_count"),
-                    "task_count": len(self._memory.list()),  # filtered below ideally
+                    "task_count": len(self._memory.list(MemoryKind.TASK)),
                 }
-                # Prefer task count by kind without importing enum cycle issues
-                from ..memory import MemoryKind
-
-                result.memory_context["task_count"] = len(self._memory.list(MemoryKind.TASK))
             else:
                 result.memory_context = {"enabled": False}
             result.stages_completed.append("memory_context")
+            self._audit.emit(
+                AuditJournal.MEMORY_RESOLVED,
+                command_id,
+                source=source,
+                owner_id=owner_id,
+                session_id=session_id,
+                workspace_id=workspace_id,
+                status="resolved",
+                metadata=dict(result.memory_context),
+            )
 
             # intent
             result.intent = self._intent.detect(
@@ -193,7 +277,20 @@ class CommandPipeline:
                 workspace_id=workspace_id,
                 session_id=session_id,
             )
+            intent_id = result.intent.intent_id
             result.stages_completed.append("intent_detection")
+            self._audit.emit(
+                AuditJournal.INTENT_CLASSIFIED,
+                command_id,
+                source=source,
+                owner_id=owner_id,
+                session_id=session_id,
+                workspace_id=workspace_id,
+                intent_id=intent_id,
+                risk_level=result.intent.risk_level.value,
+                status="classified",
+                metadata={"type": result.intent.type, "confidence": result.intent.confidence},
+            )
 
             # policy
             result.policy = self._policy.evaluate(
@@ -204,13 +301,49 @@ class CommandPipeline:
                 has_owner=owner_id is not None,
             )
             result.stages_completed.append("policy_check")
+            self._audit.emit(
+                AuditJournal.POLICY_EVALUATED,
+                command_id,
+                source=source,
+                owner_id=owner_id,
+                session_id=session_id,
+                workspace_id=workspace_id,
+                intent_id=intent_id,
+                risk_level=result.intent.risk_level.value,
+                status=result.policy.kind.value,
+                metadata={"reason": result.policy.reason},
+            )
+            if result.policy.kind == PolicyDecisionKind.BLOCKED_SAFE_MODE:
+                self._audit.emit(
+                    AuditJournal.SAFE_MODE_BLOCK,
+                    command_id,
+                    source=source,
+                    owner_id=owner_id,
+                    session_id=session_id,
+                    workspace_id=workspace_id,
+                    intent_id=intent_id,
+                    risk_level=result.intent.risk_level.value,
+                    status="blocked",
+                )
+            if result.policy.kind == PolicyDecisionKind.BLOCKED_E_STOP:
+                self._audit.emit(
+                    AuditJournal.ESTOP_BLOCK,
+                    command_id,
+                    source=source,
+                    owner_id=owner_id,
+                    session_id=session_id,
+                    workspace_id=workspace_id,
+                    intent_id=intent_id,
+                    risk_level=result.intent.risk_level.value,
+                    status="blocked",
+                )
 
             # capability lookup
             missing = [c for c in result.intent.required_capabilities if not self._registry.has(c)]
             result.missing_capabilities = missing
             result.stages_completed.append("capability_lookup")
 
-            # execution plan
+            # plan
             requires_approval = result.policy.kind == PolicyDecisionKind.NEEDS_APPROVAL
             requires_confirmation = result.policy.kind == PolicyDecisionKind.NEEDS_CONFIRMATION
             blocked = result.policy.kind in {
@@ -235,22 +368,62 @@ class CommandPipeline:
                 ),
             )
             result.stages_completed.append("execution_plan")
+            self._audit.emit(
+                AuditJournal.PLAN_CREATED,
+                command_id,
+                source=source,
+                owner_id=owner_id,
+                session_id=session_id,
+                workspace_id=workspace_id,
+                intent_id=intent_id,
+                risk_level=result.intent.risk_level.value,
+                status="planned",
+                metadata=result.plan.to_public_dict(),
+            )
 
-            # dispatch (only when Allowed and capabilities present)
+            # dispatch
             if result.policy.may_dispatch and result.plan.capabilities and not missing:
                 self._audit.emit(
-                    AuditJournal.REQUEST_APPROVED,
+                    AuditJournal.DISPATCH_STARTED,
                     command_id,
-                    intent=result.intent.type,
-                    policy=result.policy.kind.value,
+                    source=source,
+                    owner_id=owner_id,
+                    session_id=session_id,
+                    workspace_id=workspace_id,
+                    intent_id=intent_id,
+                    risk_level=result.intent.risk_level.value,
+                    status="started",
+                    capability=",".join(result.plan.capabilities),
                 )
                 result.dispatch_results = self._dispatcher.dispatch(result.intent, result.plan)
                 ok = all(d.ok for d in result.dispatch_results)
+                self._audit.emit(
+                    AuditJournal.DISPATCH_COMPLETED,
+                    command_id,
+                    source=source,
+                    owner_id=owner_id,
+                    session_id=session_id,
+                    workspace_id=workspace_id,
+                    intent_id=intent_id,
+                    risk_level=result.intent.risk_level.value,
+                    status="ok" if ok else "failed",
+                    capability=",".join(result.plan.capabilities),
+                    result={"items": [{"ok": d.ok, "capability": d.capability} for d in result.dispatch_results]},
+                )
+                dur = (time.perf_counter() - started) * 1000.0
                 if ok:
                     self._audit.emit(
                         AuditJournal.REQUEST_COMPLETED,
                         command_id,
-                        capabilities=list(result.plan.capabilities),
+                        source=source,
+                        owner_id=owner_id,
+                        session_id=session_id,
+                        workspace_id=workspace_id,
+                        intent_id=intent_id,
+                        risk_level=result.intent.risk_level.value,
+                        status="completed",
+                        duration_ms=dur,
+                        capability=",".join(result.plan.capabilities),
                     )
                     result.response = {
                         "ok": True,
@@ -258,14 +431,36 @@ class CommandPipeline:
                         "dispatch": [d.result for d in result.dispatch_results],
                     }
                 else:
-                    self._audit.emit(AuditJournal.REQUEST_FAILED, command_id, reason="dispatch failed")
+                    self._audit.emit(
+                        AuditJournal.REQUEST_FAILED,
+                        command_id,
+                        source=source,
+                        owner_id=owner_id,
+                        session_id=session_id,
+                        workspace_id=workspace_id,
+                        intent_id=intent_id,
+                        status="failed",
+                        duration_ms=dur,
+                        metadata={"reason": "dispatch failed"},
+                    )
                     result.response = {"ok": False, "reason": "dispatch failed"}
             else:
+                dur = (time.perf_counter() - started) * 1000.0
                 self._audit.emit(
                     AuditJournal.REQUEST_FAILED,
                     command_id,
-                    reason=result.policy.kind.value,
-                    detail=result.policy.reason,
+                    source=source,
+                    owner_id=owner_id,
+                    session_id=session_id,
+                    workspace_id=workspace_id,
+                    intent_id=intent_id,
+                    risk_level=result.intent.risk_level.value,
+                    status="failed",
+                    duration_ms=dur,
+                    metadata={
+                        "policy": result.policy.kind.value,
+                        "reason": result.policy.reason,
+                    },
                 )
                 result.response = {
                     "ok": False,
@@ -275,18 +470,23 @@ class CommandPipeline:
                     "requires_confirmation": requires_confirmation,
                 }
             result.stages_completed.append("dispatch")
-
-            # audit stage marker (events already emitted)
             result.stages_completed.append("audit")
-
-            # response
             result.stages_completed.append("response")
             return result
 
-        except Exception as exc:  # pragma: no cover - defensive
+        except Exception as exc:  # pragma: no cover
             result.error = str(exc)
-            self._audit.emit(AuditJournal.REQUEST_FAILED, command_id, reason=str(exc))
-            # Fill remaining stages so DoD "no skip" still holds on hard failure.
+            self._audit.emit(
+                AuditJournal.REQUEST_FAILED,
+                command_id,
+                source=source,
+                owner_id=owner_id,
+                session_id=session_id,
+                workspace_id=workspace_id,
+                intent_id=intent_id,
+                status="failed",
+                metadata={"error": str(exc)},
+            )
             for stage in PIPELINE_STAGES:
                 if stage not in result.stages_completed:
                     result.stages_completed.append(stage)

@@ -73,7 +73,7 @@ def test_whoami_allowed_dispatches_stub(tmp_path):
     assert result.dispatch_results[0].result.get("stub") is True
     assert result.identity_context.get("owner_id")
     types = [e.event_type for e in gw.audit.events()]
-    assert AuditJournal.REQUEST_APPROVED in types
+    assert AuditJournal.DISPATCH_STARTED in types
     assert AuditJournal.REQUEST_COMPLETED in types
 
 
