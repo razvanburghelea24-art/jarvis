@@ -1,9 +1,10 @@
-"""Cora Foundation package (1A–1E)."""
+"""Cora Foundation package (1A–1E + Phase 3 Integration Hub)."""
 
 from . import audit
 from . import emergency_stop
 from . import gateway
 from . import identity
+from . import integration
 from . import memory
 
-__all__ = ["audit", "emergency_stop", "gateway", "identity", "memory"]
+__all__ = ["audit", "emergency_stop", "gateway", "identity", "integration", "memory"]
