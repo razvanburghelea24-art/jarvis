@@ -40,7 +40,9 @@ class PolicyEngine:
         has_owner: bool = False,
     ) -> PolicyDecision:
         if e_stop:
-            return PolicyDecision(PolicyDecisionKind.BLOCKED_E_STOP, "e-stop active")
+            # E-Stop blocks external effects; diagnostic READ may continue.
+            if intent.risk_level != RiskLevel.READ:
+                return PolicyDecision(PolicyDecisionKind.BLOCKED_E_STOP, "e-stop active")
         if safe_mode and intent.risk_level in {RiskLevel.OWNER_CONFIRM, RiskLevel.CRITICAL, RiskLevel.FORBIDDEN}:
             return PolicyDecision(PolicyDecisionKind.BLOCKED_SAFE_MODE, "safe mode blocks elevated risk")
 

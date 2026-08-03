@@ -1,14 +1,15 @@
 """Capability Dispatcher — sole path to capability handlers.
 
-Handlers are stubs in Phase 1C: no live Discord/GitHub/Railway/Overlay calls.
-Gateway must never call external APIs directly.
+Order: Capability lookup → E-Stop gate → (Policy already decided) → handler.
+Handlers are stubs — no live Discord/GitHub/Railway/Overlay calls.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Callable, Protocol
+from typing import Any, Protocol
 
+from ..emergency_stop import EmergencyStopEngine
 from .capabilities import CapabilityRegistry
 from .types import ExecutionPlan, Intent
 
@@ -46,12 +47,16 @@ class CapabilityDispatcher:
         self,
         registry: CapabilityRegistry,
         handlers: dict[str, CapabilityHandler] | None = None,
+        emergency_stop: EmergencyStopEngine | None = None,
     ) -> None:
         self._registry = registry
         self._handlers: dict[str, CapabilityHandler] = dict(handlers or {})
-        # Default stubs for all registered capabilities.
+        self._estop = emergency_stop
         for name in registry.names():
             self._handlers.setdefault(name, _stub(name))
+
+    def bind_emergency_stop(self, engine: EmergencyStopEngine | None) -> None:
+        self._estop = engine
 
     def register(self, capability: str, handler: CapabilityHandler) -> None:
         if not self._registry.has(capability):
@@ -64,6 +69,22 @@ class CapabilityDispatcher:
             if not self._registry.has(cap):
                 results.append(
                     DispatchResult(ok=False, capability=cap, error="capability not registered")
+                )
+                continue
+            # Hard gate: E-Stop / Safe Mode cannot be bypassed by handlers.
+            if self._estop is not None and not self._estop.allows_capability(cap):
+                snap = self._estop.snapshot()
+                results.append(
+                    DispatchResult(
+                        ok=False,
+                        capability=cap,
+                        error=f"blocked by safety mode {snap.get('mode')}",
+                        result={
+                            "blocked": True,
+                            "safety": snap,
+                            "message": snap.get("message"),
+                        },
+                    )
                 )
                 continue
             handler = self._handlers.get(cap) or _stub(cap)

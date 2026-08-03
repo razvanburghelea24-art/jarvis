@@ -22,9 +22,11 @@ class AuditEventType(str, Enum):
     REQUEST_FAILED = "REQUEST_FAILED"
     SAFE_MODE_BLOCK = "SAFE_MODE_BLOCK"
     ESTOP_BLOCK = "ESTOP_BLOCK"
-    # Prepared for Phase 1E
+    # Phase 1E
     ESTOP_TRIGGERED = "ESTOP_TRIGGERED"
     ESTOP_RELEASED = "ESTOP_RELEASED"
+    SAFE_MODE_ENTERED = "SAFE_MODE_ENTERED"
+    SAFE_MODE_EXITED = "SAFE_MODE_EXITED"
 
 
 def utc_now_iso() -> str:

@@ -6,6 +6,7 @@ import threading
 from pathlib import Path
 
 from ..audit import AuditEngine, get_audit_engine
+from ..emergency_stop import EmergencyStopEngine, get_emergency_stop
 from ..identity import IdentityService, get_identity_service
 from ..memory import MemoryEngine, get_memory_engine
 from .audit_hooks import AuditJournal
@@ -28,14 +29,16 @@ class CommandGateway:
         identity: IdentityService | None = None,
         memory: MemoryEngine | None = None,
         audit_engine: AuditEngine | None = None,
+        emergency_stop: EmergencyStopEngine | None = None,
         registry: CapabilityRegistry | None = None,
     ) -> None:
         self._enabled = gateway_enabled_from_env() if enabled is None else bool(enabled)
         self._identity = identity
         self._memory = memory
         self._audit_engine = audit_engine
+        self._estop = emergency_stop
         self._registry = registry or default_capability_registry()
-        self._dispatcher = CapabilityDispatcher(self._registry)
+        self._dispatcher = CapabilityDispatcher(self._registry, emergency_stop=emergency_stop)
         self._audit = AuditJournal(engine=audit_engine)
         self._pipeline = CommandPipeline(
             intent_engine=IntentEngine(),
@@ -45,6 +48,7 @@ class CommandGateway:
             audit=self._audit,
             identity=self._identity,
             memory=self._memory,
+            emergency_stop=self._estop,
         )
 
     @property
@@ -61,6 +65,10 @@ class CommandGateway:
     @property
     def registry(self) -> CapabilityRegistry:
         return self._registry
+
+    @property
+    def emergency_stop(self) -> EmergencyStopEngine | None:
+        return self._estop
 
     def submit(
         self,
@@ -87,15 +95,27 @@ def get_command_gateway(
     enabled: bool | None = None,
     memory_path: Path | str | None = None,
     audit_path: Path | str | None = None,
+    estop_path: Path | str | None = None,
 ) -> CommandGateway:
-    """Process singleton. Wires Identity + Memory + Audit (consume, don't clone)."""
+    """Process singleton. Wires Identity + Memory + Audit + E-Stop."""
     global _GW
     with _GW_LOCK:
         if _GW is None:
             identity = get_identity_service()
             memory = get_memory_engine(path=memory_path) if memory_path is not None else get_memory_engine()
             audit = get_audit_engine(path=audit_path) if audit_path is not None else get_audit_engine()
-            _GW = CommandGateway(enabled=enabled, identity=identity, memory=memory, audit_engine=audit)
+            estop = (
+                get_emergency_stop(path=estop_path, audit=audit)
+                if estop_path is not None
+                else get_emergency_stop(audit=audit)
+            )
+            _GW = CommandGateway(
+                enabled=enabled,
+                identity=identity,
+                memory=memory,
+                audit_engine=audit,
+                emergency_stop=estop,
+            )
         elif enabled is not None:
             _GW.set_enabled(bool(enabled))
         return _GW

@@ -7,6 +7,8 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
+from ..emergency_stop import EmergencyStopEngine
+from ..emergency_stop.states import SafetyMode, is_estop_mode
 from ..identity import IdentityService
 from ..memory import MemoryEngine, MemoryKind
 from .audit_hooks import AuditJournal
@@ -83,6 +85,7 @@ class CommandPipeline:
         audit: AuditJournal,
         identity: IdentityService | None = None,
         memory: MemoryEngine | None = None,
+        emergency_stop: EmergencyStopEngine | None = None,
     ) -> None:
         self._intent = intent_engine
         self._policy = policy_engine
@@ -91,6 +94,7 @@ class CommandPipeline:
         self._audit = audit
         self._identity = identity
         self._memory = memory
+        self._estop = emergency_stop
 
     def _ctx(
         self,
@@ -235,6 +239,17 @@ class CommandPipeline:
                 }
             else:
                 result.identity_context = {"enabled": False, "bound": False}
+
+            # Emergency Stop SSOT overrides identity runtime flags when module is enforcing.
+            if self._estop is not None and self._estop.enabled:
+                safety = self._estop.snapshot()
+                mode = SafetyMode(safety["mode"])
+                runtime_estop = is_estop_mode(mode)
+                runtime_safe = mode == SafetyMode.SAFE_MODE
+                result.identity_context["safety"] = safety
+                result.identity_context["safe_mode"] = runtime_safe
+                result.identity_context["e_stop"] = runtime_estop
+
             result.stages_completed.append("identity")
             self._audit.emit(
                 AuditJournal.IDENTITY_RESOLVED,
@@ -351,9 +366,50 @@ class CommandPipeline:
                 PolicyDecisionKind.BLOCKED_SAFE_MODE,
                 PolicyDecisionKind.BLOCKED_E_STOP,
             } or bool(missing)
-            caps = () if blocked or requires_approval or requires_confirmation else tuple(
-                result.intent.required_capabilities
-            )
+            raw_caps = tuple(result.intent.required_capabilities)
+            if blocked or requires_approval or requires_confirmation:
+                caps: tuple[str, ...] = ()
+            else:
+                caps = tuple(
+                    c
+                    for c in raw_caps
+                    if self._estop is None or self._estop.allows_capability(c)
+                )
+                if raw_caps and not caps:
+                    # Capability→E-Stop gate removed all actions.
+                    blocked = True
+                    if result.policy.kind == PolicyDecisionKind.ALLOWED:
+                        # Reflect safety block in policy outcome for response clarity.
+                        if self._estop is not None and self._estop.enabled:
+                            snap = self._estop.snapshot()
+                            if snap.get("is_estop"):
+                                result.policy = PolicyDecision(
+                                    PolicyDecisionKind.BLOCKED_E_STOP, "e-stop blocks capabilities"
+                                )
+                                self._audit.emit(
+                                    AuditJournal.ESTOP_BLOCK,
+                                    command_id,
+                                    source=source,
+                                    owner_id=owner_id,
+                                    session_id=session_id,
+                                    workspace_id=workspace_id,
+                                    intent_id=intent_id,
+                                    status="blocked",
+                                )
+                            elif snap.get("is_safe_mode"):
+                                result.policy = PolicyDecision(
+                                    PolicyDecisionKind.BLOCKED_SAFE_MODE, "safe mode blocks capabilities"
+                                )
+                                self._audit.emit(
+                                    AuditJournal.SAFE_MODE_BLOCK,
+                                    command_id,
+                                    source=source,
+                                    owner_id=owner_id,
+                                    session_id=session_id,
+                                    workspace_id=workspace_id,
+                                    intent_id=intent_id,
+                                    status="blocked",
+                                )
             result.plan = ExecutionPlan(
                 plan_id=f"plan_{uuid.uuid4().hex}",
                 intent_id=result.intent.intent_id,

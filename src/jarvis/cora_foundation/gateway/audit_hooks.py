@@ -45,6 +45,8 @@ class AuditJournal:
     ESTOP_BLOCK = AuditEventType.ESTOP_BLOCK.value
     ESTOP_TRIGGERED = AuditEventType.ESTOP_TRIGGERED.value
     ESTOP_RELEASED = AuditEventType.ESTOP_RELEASED.value
+    SAFE_MODE_ENTERED = AuditEventType.SAFE_MODE_ENTERED.value
+    SAFE_MODE_EXITED = AuditEventType.SAFE_MODE_EXITED.value
 
     def __init__(self, engine: AuditEngine | None = None) -> None:
         self._lock = threading.Lock()
