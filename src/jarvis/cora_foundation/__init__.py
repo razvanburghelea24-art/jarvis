@@ -1,4 +1,4 @@
-"""Cora Foundation package (1A–1E + Phase 3–6A)."""
+"""Cora Foundation package (1A–1E + Phase 3–6A + Snapshot 8.2)."""
 
 from . import agents
 from . import audit
@@ -10,6 +10,7 @@ from . import integration
 from . import memory
 from . import orchestrator
 from . import planner
+from . import snapshot
 
 __all__ = [
     "agents",
@@ -22,4 +23,5 @@ __all__ = [
     "memory",
     "orchestrator",
     "planner",
+    "snapshot",
 ]
