@@ -5,6 +5,7 @@ Does not modify Execution Layer (Planner / ToolRouter / Dispatcher).
 """
 
 from .discord import DiscordAdapter, MockDiscordTransport
+from .framework import FrameworkAdapter, MockFrameworkTransport
 from .github import GitHubAdapter, MockGitHubTransport
 from .result import AdapterResult, AdapterStatus
 
@@ -12,7 +13,9 @@ __all__ = [
     "AdapterResult",
     "AdapterStatus",
     "DiscordAdapter",
+    "FrameworkAdapter",
     "GitHubAdapter",
     "MockDiscordTransport",
+    "MockFrameworkTransport",
     "MockGitHubTransport",
 ]
