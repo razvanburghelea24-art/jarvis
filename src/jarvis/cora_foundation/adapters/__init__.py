@@ -7,6 +7,7 @@ Does not modify Execution Layer (Planner / ToolRouter / Dispatcher).
 from .discord import DiscordAdapter, MockDiscordTransport
 from .framework import FrameworkAdapter, MockFrameworkTransport
 from .github import GitHubAdapter, MockGitHubTransport
+from .railway import MockRailwayTransport, RailwayAdapter
 from .result import AdapterResult, AdapterStatus
 
 __all__ = [
@@ -18,4 +19,6 @@ __all__ = [
     "MockDiscordTransport",
     "MockFrameworkTransport",
     "MockGitHubTransport",
+    "MockRailwayTransport",
+    "RailwayAdapter",
 ]
