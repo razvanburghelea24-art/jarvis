@@ -8,10 +8,10 @@ Flow (fixed order):
     → emit_state()
     → emit_response()
 
-Produces later: ConversationResponse · ConversationState · ConversationEvents
+Produces later: ConversationEvents formalization · Streaming last
 Never: Electron · React · Persona · Avatar · Camera · IPC · UI mutation
 
-Business logic is FORBIDDEN in this skeleton revision.
+Logic lands piece-by-piece under Owner GO (Validator…ResponseBuilder done).
 """
 
 from __future__ import annotations

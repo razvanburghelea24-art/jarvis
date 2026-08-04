@@ -6,15 +6,12 @@ import ast
 import inspect
 from pathlib import Path
 
-import pytest
-
 from src.jarvis.cora_foundation.conversation import (
     ConversationEngine,
     ContextBuilder,
     DecisionEngine,
     RequestValidator,
     ResponseBuilder,
-    SkeletonNotImplemented,
     StateEmitter,
 )
 
@@ -44,7 +41,7 @@ def test_pipeline_methods_exist():
         assert callable(getattr(engine, name))
 
 
-def test_each_step_raises_skeleton_not_implemented():
+def test_full_spine_produces_response():
     engine = ConversationEngine()
     req = {
         "request_id": "r",
@@ -57,15 +54,11 @@ def test_each_step_raises_skeleton_not_implemented():
     decision = engine.decide(validated, ctx)
     final = engine.emit_state(validated, decision)
     assert final.presentation.value in {"Thinking", "Completed", "WaitingOwner"}
-    with pytest.raises(SkeletonNotImplemented, match="ResponseBuilder"):
-        engine.emit_response(validated, ctx, decision)
-    with pytest.raises(SkeletonNotImplemented, match="ResponseBuilder"):
-        engine.submit(req)
-
-
-def test_component_methods_are_stubs():
-    with pytest.raises(SkeletonNotImplemented):
-        ResponseBuilder().build("x", "y", "z")  # type: ignore[arg-type]
+    response = engine.emit_response(validated, ctx, decision)
+    assert response.request_id == "r"
+    assert response.metadata.get("label") == "Respond"
+    submitted = engine.submit(req)
+    assert submitted.metadata.get("response_mode") == "placeholder"
 
 
 

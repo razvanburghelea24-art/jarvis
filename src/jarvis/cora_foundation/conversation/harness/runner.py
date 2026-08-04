@@ -13,10 +13,10 @@ from ..engine import (
     ContextBuilder,
     DecisionEngine,
     RequestValidator,
+    ResponseBuilder,
     StateEmitter,
 )
 from ..events import EVENT_CONVERSATION_STATE_CHANGED, get_conversation_event_journal
-from .fakes import FakeResponseBuilder
 
 
 @dataclass
@@ -41,7 +41,7 @@ class HarnessResult:
 class ConversationHarness:
     """
     Banc de test:
-      ConversationRequest → Fake Gateway → Engine(real steps) → Fake Response
+      ConversationRequest → Gateway Accept → Engine(real steps) → Response
 
     ConversationEvents journal is wired via StateEmitter on_state (not inside StateEmitter).
     """
@@ -64,7 +64,7 @@ class ConversationHarness:
             validator=RequestValidator(),
             context_builder=ContextBuilder(),
             decision_engine=DecisionEngine(),
-            response_builder=FakeResponseBuilder(),
+            response_builder=ResponseBuilder(),
             state_emitter=self.emitter,
         )
         self.engine.SKELETON = True

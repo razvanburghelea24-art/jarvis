@@ -145,8 +145,8 @@ def test_harness_turn_with_real_validator():
     )
     assert result.ok is True
     assert result.response is not None
-    assert result.response.text == ""
-
+    assert result.response.text.strip() != ""
+    assert result.response.metadata.get("response_mode") == "placeholder"
 
 def test_request_validator_imports_only_contracts():
     tree = ast.parse(RV_PATH.read_text(encoding="utf-8"))

@@ -52,12 +52,13 @@ def test_3_state_idle_to_listening():
     assert [s.presentation.value for s in states] == ["Idle", "Listening"]
 
 
-def test_4_empty_conversation_response():
+def test_4_placeholder_conversation_response():
     h = ConversationHarness()
-    result = h.run_turn(_valid_payload(request_id="req-empty-resp"))
+    result = h.run_turn(_valid_payload(request_id="req-placeholder-resp"))
     assert result.ok is True
     assert result.response is not None
-    assert result.response.text == ""
+    assert result.response.text.strip() != ""
+    assert result.response.metadata.get("response_mode") == "placeholder"
     assert result.response.to_canonical_dict()["kind"] == "ConversationResponse"
     assert result.response.to_canonical_dict()["schema_family"] == "cora.conversation.contracts"
 
