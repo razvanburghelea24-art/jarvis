@@ -6,6 +6,7 @@ No network. No API keys. Stable text from the last user message.
 from __future__ import annotations
 
 from .adapter import LLMAdapter
+from .capabilities import CAPABILITY_MOCK, ModelCapability
 from .contracts import LLMRequest, LLMResponse
 
 
@@ -14,8 +15,14 @@ class MockLLMProvider:
 
     provider_id = "mock"
 
-    def __init__(self, *, prefix: str = "[mock] ") -> None:
+    def __init__(
+        self,
+        *,
+        prefix: str = "[mock] ",
+        capability: ModelCapability | None = None,
+    ) -> None:
         self._prefix = prefix
+        self.capability = capability or CAPABILITY_MOCK
 
     def complete(self, request: LLMRequest) -> LLMResponse:
         user_text = ""
