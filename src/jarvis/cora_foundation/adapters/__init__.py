@@ -4,7 +4,12 @@ Law: No Adapter without Dispatcher.
 Does not modify Execution Layer (Planner / ToolRouter / Dispatcher).
 """
 
-from .discord import DiscordAdapter, MockDiscordTransport
+from .discord import (
+    DiscordAdapter,
+    LiveDiscordTransport,
+    MockDiscordTransport,
+    execute_discord_gated,
+)
 from .framework import FrameworkAdapter, MockFrameworkTransport
 from .github import (
     GitHubAdapter,
@@ -22,6 +27,7 @@ __all__ = [
     "DiscordAdapter",
     "FrameworkAdapter",
     "GitHubAdapter",
+    "LiveDiscordTransport",
     "LiveGitHubTransport",
     "MockDiscordTransport",
     "MockFrameworkTransport",
@@ -30,5 +36,6 @@ __all__ = [
     "MockRailwayTransport",
     "N8NAdapter",
     "RailwayAdapter",
+    "execute_discord_gated",
     "execute_github_gated",
 ]
