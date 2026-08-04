@@ -8,6 +8,7 @@ from . import emergency_stop
 from . import gateway
 from . import identity
 from . import integration
+from . import llm
 from . import memory
 from . import orchestrator
 from . import planner
@@ -22,6 +23,7 @@ __all__ = [
     "gateway",
     "identity",
     "integration",
+    "llm",
     "memory",
     "orchestrator",
     "planner",
