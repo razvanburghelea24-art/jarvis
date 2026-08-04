@@ -20,12 +20,15 @@ class LifecyclePhase(str, Enum):
 
 
 class PresentationHint(str, Enum):
+    IDLE = "Idle"
     LISTENING = "Listening"
     THINKING = "Thinking"
     PLANNING = "Planning"
     SPEAKING = "Speaking"
     SUCCESS = "Success"
     WAITING = "Waiting"
+    WAITING_OWNER = "WaitingOwner"
+    COMPLETED = "Completed"
 
 
 class ErrorClass(str, Enum):

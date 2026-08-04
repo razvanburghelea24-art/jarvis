@@ -1,7 +1,4 @@
-"""Conversation package — contracts only in Beta 1.0 Schema Freeze.
-
-No Engine, Planner wiring, Gateway handlers, Desktop, Persona, or Avatar here.
-"""
+"""Conversation package — contracts + Snapshot projection (no Engine)."""
 
 from .contracts import (
     SCHEMA_FAMILY,
@@ -26,6 +23,7 @@ from .contracts import (
     to_canonical_json,
     from_canonical_json,
 )
+from .projection import empty_conversation_section, project_conversation_state
 
 __all__ = [
     "SCHEMA_FAMILY",
@@ -49,4 +47,6 @@ __all__ = [
     "validate_state",
     "to_canonical_json",
     "from_canonical_json",
+    "empty_conversation_section",
+    "project_conversation_state",
 ]

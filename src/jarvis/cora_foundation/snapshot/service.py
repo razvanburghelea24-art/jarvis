@@ -56,10 +56,20 @@ class SnapshotService:
         self._estop = estop
         self._lock = threading.RLock()
         self._last: UnifiedSnapshot | None = None
+        self._conversation_state: Any | None = None
 
     @property
     def enabled(self) -> bool:
         return self._enabled
+
+    def set_conversation_state(self, state: Any | None) -> None:
+        """Inject ConversationState for Snapshot projection (Engine will call later)."""
+        with self._lock:
+            self._conversation_state = state
+
+    def clear_conversation_state(self) -> None:
+        with self._lock:
+            self._conversation_state = None
 
     def build(self) -> UnifiedSnapshot:
         if not self._enabled:
@@ -77,6 +87,14 @@ class SnapshotService:
         snap.gateway = self._section_gateway()
         snap.audit = self._section_audit()
         snap.operator = self._section_operator()
+        snap.conversation = self._section_conversation()
+        # Mirror presentation into runtime.status for legacy consumers (Persona prefers conversation).
+        if snap.conversation.get("source") == "live" and snap.conversation.get("status"):
+            snap.runtime = {
+                **snap.runtime,
+                "status": snap.conversation["status"],
+                "detail": snap.conversation.get("detail") or snap.runtime.get("detail"),
+            }
         with self._lock:
             self._last = snap
         return snap
@@ -387,6 +405,25 @@ class SnapshotService:
             "controls": False,
             "bar": bar10(pct),
         }
+
+    def _section_conversation(self) -> dict[str, Any]:
+        from src.jarvis.cora_foundation.conversation.projection import (
+            empty_conversation_section,
+            project_conversation_state,
+        )
+
+        with self._lock:
+            state = self._conversation_state
+        if state is None:
+            return empty_conversation_section()
+        try:
+            return project_conversation_state(state)
+        except Exception as exc:  # noqa: BLE001 — snapshot must not crash
+            section = empty_conversation_section()
+            section["source"] = "bridge_stub"
+            section["health"] = "degraded"
+            section["detail"] = f"conversation projection error: {exc}"
+            return section
 
     def _pending(self, name: str, status: str) -> dict[str, Any]:
         return {

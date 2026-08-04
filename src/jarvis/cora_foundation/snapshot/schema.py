@@ -37,6 +37,8 @@ class UnifiedSnapshot:
     gateway: dict[str, Any] = field(default_factory=dict)
     audit: dict[str, Any] = field(default_factory=dict)
     operator: dict[str, Any] = field(default_factory=dict)
+    # Additive (Beta): ConversationState projection — never Persona/Avatar fields.
+    conversation: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -50,6 +52,7 @@ class UnifiedSnapshot:
             "gateway": dict(self.gateway),
             "audit": dict(self.audit),
             "operator": dict(self.operator),
+            "conversation": dict(self.conversation),
         }
 
 
@@ -61,6 +64,22 @@ def empty_snapshot() -> UnifiedSnapshot:
         "detail": f"{name} not collected",
         "status": "Idle",
     }
+    conversation_off = {
+        "source": "off",
+        "health": "off",
+        "health_pct": 0.0,
+        "detail": "conversation state not projected",
+        "status": "Idle",
+        "schema_family": "cora.conversation.contracts",
+        "schema_version": 1,
+        "kind": "ConversationState",
+        "presentation": "Idle",
+        "lifecycle": "Idle",
+        "session_id": None,
+        "request_id": None,
+        "workspace_id": None,
+        "error_class": None,
+    }
     return UnifiedSnapshot(
         runtime=stub("runtime"),
         planner=stub("planner"),
@@ -70,6 +89,7 @@ def empty_snapshot() -> UnifiedSnapshot:
         gateway=stub("gateway"),
         audit=stub("audit"),
         operator={**stub("operator"), "indicator": "OBSERVE"},
+        conversation=conversation_off,
     )
 
 

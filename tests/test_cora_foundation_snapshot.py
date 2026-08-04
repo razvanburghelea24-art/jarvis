@@ -23,7 +23,17 @@ def test_empty_snapshot_shape():
     snap = empty_snapshot()
     d = snap.to_dict()
     assert d["schema"] == SCHEMA
-    for key in ("runtime", "planner", "scheduler", "agents", "memory", "gateway", "audit", "operator"):
+    for key in (
+        "runtime",
+        "planner",
+        "scheduler",
+        "agents",
+        "memory",
+        "gateway",
+        "audit",
+        "operator",
+        "conversation",
+    ):
         assert key in d
         assert "health_pct" in d[key]
 
@@ -63,4 +73,5 @@ def test_runtime_live_from_identity(tmp_path):
         "gateway",
         "audit",
         "operator",
+        "conversation",
     }
