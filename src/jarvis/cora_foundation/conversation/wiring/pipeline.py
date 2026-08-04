@@ -85,6 +85,9 @@ class WiredConversationPipeline:
 
       validate → memory → workspace → context → decide
         → (Respond? router → llm) → response → state → events → stream
+
+    SSOT for Beta Foundation (with LLM). Core v1 without LLM remains
+    ConversationEngine.submit / Harness — intentional dual path, not a bypass.
     """
 
     PIPELINE_ID = "cora.beta.foundation.wired.v1"
