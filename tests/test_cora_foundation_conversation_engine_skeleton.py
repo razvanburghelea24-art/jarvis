@@ -54,16 +54,16 @@ def test_each_step_raises_skeleton_not_implemented():
     }
     validated = engine.validate(req)
     ctx = engine.build_context(validated)
-    assert ctx.sealed is True
-    with pytest.raises(SkeletonNotImplemented, match="DecisionEngine"):
-        engine.decide(validated, ctx)
-    with pytest.raises(SkeletonNotImplemented, match="DecisionEngine"):
+    decision = engine.decide(validated, ctx)
+    assert decision.kind.value in {"answer", "clarify", "refuse", "tool", "switch_workspace"}
+    with pytest.raises(SkeletonNotImplemented, match="StateEmitter"):
+        engine.emit_state(validated, presentation="Thinking")
+    with pytest.raises(SkeletonNotImplemented, match="StateEmitter"):
         engine.submit(req)
 
 
 def test_component_methods_are_stubs():
     stubs = [
-        (DecisionEngine().decide, ("x", "y")),
         (ResponseBuilder().build, ("x", "y", "z")),
         (StateEmitter().emit, ("x",), {"presentation": "Idle"}),
     ]

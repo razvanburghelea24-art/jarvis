@@ -26,23 +26,7 @@ from ..events import get_conversation_event_journal
 
 FakeRequestValidator = RequestValidator
 FakeContextBuilder = ContextBuilder
-
-
-class FakeDecisionEngine(DecisionEngine):
-    def decide(
-        self,
-        request: ConversationRequest,
-        context: ConversationContext,
-    ) -> ConversationDecision:
-        return ConversationDecision(
-            decision_id=f"dec_harness_{uuid4().hex[:8]}",
-            request_id=request.request_id,
-            kind=DecisionKind.ANSWER,
-            workspace_id=request.workspace_id,
-            planner_ref=None,
-            tool_intent={},
-            reason="harness-fake-answer",
-        )
+FakeDecisionEngine = DecisionEngine
 
 
 class FakeResponseBuilder(ResponseBuilder):
