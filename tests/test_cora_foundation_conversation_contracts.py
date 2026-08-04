@@ -275,6 +275,8 @@ def test_no_desktop_persona_avatar_imports():
 
 
 def test_package_has_no_engine_modules():
-    names = {p.name for p in CONV_DIR.rglob("*.py")}
+    """Contracts package stays types-only; Engine lives under conversation/engine/."""
+    contracts_dir = CONV_DIR / "contracts"
+    names = {p.name for p in contracts_dir.rglob("*.py")}
     for banned in ("engine.py", "planner.py", "gateway.py", "llm.py"):
         assert banned not in names
