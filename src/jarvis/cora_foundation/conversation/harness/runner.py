@@ -8,12 +8,15 @@ from typing import Any, Mapping
 from ...gateway.audit_hooks import AuditJournal
 from ...gateway.conversation_accept import ConversationAcceptResult, accept_conversation_request
 from ..contracts import ConversationRequest, ConversationResponse, ConversationState
-from ..engine import ConversationEngine, ContextBuilder, DecisionEngine, RequestValidator
-from ..events import EVENT_CONVERSATION_STATE_CHANGED, get_conversation_event_journal
-from .fakes import (
-    FakeResponseBuilder,
-    FakeStateEmitter,
+from ..engine import (
+    ConversationEngine,
+    ContextBuilder,
+    DecisionEngine,
+    RequestValidator,
+    StateEmitter,
 )
+from ..events import EVENT_CONVERSATION_STATE_CHANGED, get_conversation_event_journal
+from .fakes import FakeResponseBuilder
 
 
 @dataclass
@@ -38,14 +41,25 @@ class HarnessResult:
 class ConversationHarness:
     """
     Banc de test:
-      ConversationRequest → Fake Gateway → Skeleton(fakes) → Fake Response
+      ConversationRequest → Fake Gateway → Engine(real steps) → Fake Response
 
-    No LLM / Planner / Memory / Tools / Streaming / Electron.
+    ConversationEvents journal is wired via StateEmitter on_state (not inside StateEmitter).
     """
 
     def __init__(self, *, audit: AuditJournal | None = None) -> None:
         self.audit = audit or AuditJournal()
-        self.emitter = FakeStateEmitter()
+
+        def _on_state(state: ConversationState) -> None:
+            # Harness-owned Timeline hook until ConversationEvents module lands
+            get_conversation_event_journal().record_state(
+                presentation=state.presentation.value,
+                request_id=state.request_id,
+                workspace_id=state.workspace_id,
+                session_id=state.session_id,
+                lifecycle=state.lifecycle.value,
+            )
+
+        self.emitter = StateEmitter(on_state=_on_state)
         self.engine = ConversationEngine(
             validator=RequestValidator(),
             context_builder=ContextBuilder(),
@@ -53,11 +67,9 @@ class ConversationHarness:
             response_builder=FakeResponseBuilder(),
             state_emitter=self.emitter,
         )
-        # Real validator/context/decision; response/state still harness fakes where needed.
         self.engine.SKELETON = True
 
     def accept(self, payload: Mapping[str, Any] | ConversationRequest | None) -> ConversationAcceptResult:
-        """Fake Gateway Accept (validate-only)."""
         return accept_conversation_request(payload, audit=self.audit)
 
     def emit_state_sequence(
@@ -65,19 +77,16 @@ class ConversationHarness:
         request: ConversationRequest,
         presentations: list[str],
     ) -> list[ConversationState]:
-        """Emit presentation trail (e.g. Idle → Listening) for timeline DoD."""
         out: list[ConversationState] = []
+        previous: str | None = None
         for p in presentations:
-            out.append(self.emitter.emit(request, presentation=p))
+            out.append(
+                self.emitter.emit_transition(request, previous=previous, current=p)
+            )
+            previous = p
         return out
 
     def run_turn(self, payload: Mapping[str, Any]) -> HarnessResult:
-        """
-        Full harness turn:
-          1) Gateway Accept
-          2) Idle → Listening state trail
-          3) Skeleton submit → empty ConversationResponse
-        """
         gateway = self.accept(payload)
         if not gateway.ok or gateway.request is None:
             return HarnessResult(
@@ -89,9 +98,8 @@ class ConversationHarness:
         request = gateway.request
         states = self.emit_state_sequence(request, ["Idle", "Listening"])
         try:
-            # submit also emits Thinking via spine — harness fakes allow it
             response = self.engine.submit(request)
-        except Exception as exc:  # noqa: BLE001 — harness surfaces errors
+        except Exception as exc:  # noqa: BLE001
             return HarnessResult(
                 ok=False,
                 gateway=gateway,

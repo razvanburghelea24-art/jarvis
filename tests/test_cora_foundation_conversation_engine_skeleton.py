@@ -55,24 +55,18 @@ def test_each_step_raises_skeleton_not_implemented():
     validated = engine.validate(req)
     ctx = engine.build_context(validated)
     decision = engine.decide(validated, ctx)
-    assert decision.kind.value in {"answer", "clarify", "refuse", "tool", "switch_workspace"}
-    with pytest.raises(SkeletonNotImplemented, match="StateEmitter"):
-        engine.emit_state(validated, presentation="Thinking")
-    with pytest.raises(SkeletonNotImplemented, match="StateEmitter"):
+    final = engine.emit_state(validated, decision)
+    assert final.presentation.value in {"Thinking", "Completed", "WaitingOwner"}
+    with pytest.raises(SkeletonNotImplemented, match="ResponseBuilder"):
+        engine.emit_response(validated, ctx, decision)
+    with pytest.raises(SkeletonNotImplemented, match="ResponseBuilder"):
         engine.submit(req)
 
 
 def test_component_methods_are_stubs():
-    stubs = [
-        (ResponseBuilder().build, ("x", "y", "z")),
-        (StateEmitter().emit, ("x",), {"presentation": "Idle"}),
-    ]
-    for item in stubs:
-        fn = item[0]
-        args = item[1]
-        kwargs = item[2] if len(item) > 2 else {}
-        with pytest.raises(SkeletonNotImplemented):
-            fn(*args, **kwargs)
+    with pytest.raises(SkeletonNotImplemented):
+        ResponseBuilder().build("x", "y", "z")  # type: ignore[arg-type]
+
 
 
 def test_no_desktop_ui_imports_in_engine():

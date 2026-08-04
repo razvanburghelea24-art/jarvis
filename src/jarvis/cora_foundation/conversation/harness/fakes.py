@@ -1,7 +1,4 @@
-"""Harness fakes for not-yet-implemented spine steps.
-
-RequestValidator is real — harness injects it directly (see runner.py).
-"""
+"""Harness fakes for not-yet-implemented spine steps."""
 
 from __future__ import annotations
 
@@ -12,21 +9,18 @@ from ..contracts import (
     ConversationDecision,
     ConversationRequest,
     ConversationResponse,
-    ConversationState,
-    DecisionKind,
     LifecyclePhase,
-    PresentationHint,
 )
 from ..engine.context_builder import ContextBuilder
 from ..engine.decision_engine import DecisionEngine
 from ..engine.request_validator import RequestValidator
 from ..engine.response_builder import ResponseBuilder
 from ..engine.state_emitter import StateEmitter
-from ..events import get_conversation_event_journal
 
 FakeRequestValidator = RequestValidator
 FakeContextBuilder = ContextBuilder
 FakeDecisionEngine = DecisionEngine
+FakeStateEmitter = StateEmitter
 
 
 class FakeResponseBuilder(ResponseBuilder):
@@ -46,35 +40,3 @@ class FakeResponseBuilder(ResponseBuilder):
             citations=(),
             metadata={"harness": True},
         )
-
-
-class FakeStateEmitter(StateEmitter):
-    def emit(
-        self,
-        request: ConversationRequest,
-        *,
-        presentation: str,
-        lifecycle: str | None = None,
-    ) -> ConversationState:
-        life = lifecycle or (
-            "Listening"
-            if presentation == "Listening"
-            else "Idle"
-            if presentation == "Idle"
-            else "Thinking"
-        )
-        state = ConversationState(
-            session_id=request.session_id,
-            request_id=request.request_id,
-            workspace_id=request.workspace_id,
-            lifecycle=LifecyclePhase(life),
-            presentation=PresentationHint(presentation),
-        )
-        get_conversation_event_journal().record_state(
-            presentation=state.presentation.value,
-            request_id=state.request_id,
-            workspace_id=state.workspace_id,
-            session_id=state.session_id,
-            lifecycle=state.lifecycle.value,
-        )
-        return state

@@ -81,11 +81,11 @@ class ConversationEngine:
     def emit_state(
         self,
         request: ConversationRequest,
-        *,
-        presentation: str,
-        lifecycle: str | None = None,
+        decision: ConversationDecision,
     ) -> ConversationState:
-        return self.state_emitter.emit(request, presentation=presentation, lifecycle=lifecycle)
+        """Publish ConversationState trail for decision; returns final state."""
+        trail = self.state_emitter.emit_trail(decision, request)
+        return trail[-1]
 
     def emit_response(
         self,
@@ -102,16 +102,14 @@ class ConversationEngine:
         request: Mapping[str, Any] | ConversationRequest,
     ) -> ConversationResponse:
         """
-        Canonical turn pipeline. Skeleton: each step raises until implemented.
+        Canonical turn pipeline.
 
         Order is frozen:
           validate → build_context → decide → emit_state → emit_response
         Streaming is NOT part of this spine yet (comes last in Beta).
         """
         validated = self.validate(request)
-        # Presentation milestones (conceptual — StateEmitter not implemented)
-        # Listening / Thinking / Planning will be emitted by real StateEmitter later.
         context = self.build_context(validated)
         decision = self.decide(validated, context)
-        self.emit_state(validated, presentation="Thinking", lifecycle="Thinking")
+        self.emit_state(validated, decision)
         return self.emit_response(validated, context, decision)
