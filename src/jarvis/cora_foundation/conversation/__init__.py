@@ -1,4 +1,4 @@
-"""Conversation package — contracts + projection + event timeline (no Engine)."""
+"""Conversation package — contracts, projection, events, Engine skeleton."""
 
 from .contracts import (
     SCHEMA_FAMILY,
@@ -22,6 +22,15 @@ from .contracts import (
     validate_state,
     to_canonical_json,
     from_canonical_json,
+)
+from .engine import (
+    ConversationEngine,
+    ContextBuilder,
+    DecisionEngine,
+    RequestValidator,
+    ResponseBuilder,
+    SkeletonNotImplemented,
+    StateEmitter,
 )
 from .events import (
     EVENT_CONVERSATION_STATE_CHANGED,
@@ -61,4 +70,11 @@ __all__ = [
     "ConversationStateChanged",
     "get_conversation_event_journal",
     "reset_conversation_event_journal_for_tests",
+    "ConversationEngine",
+    "ContextBuilder",
+    "DecisionEngine",
+    "RequestValidator",
+    "ResponseBuilder",
+    "SkeletonNotImplemented",
+    "StateEmitter",
 ]
