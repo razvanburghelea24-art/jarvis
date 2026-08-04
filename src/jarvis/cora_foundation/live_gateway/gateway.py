@@ -321,5 +321,8 @@ class LiveExecutionGateway:
             "kick",
             "heal",
             "broadcast",
+            "activate",
+            "deactivate",
+            "cancel",
         }
         return bool(parts & write_tokens)
