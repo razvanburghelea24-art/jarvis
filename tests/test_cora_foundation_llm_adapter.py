@@ -95,19 +95,24 @@ def test_mock_empty_user_message():
     assert out.finish_reason == "stop"
 
 
-def test_no_real_provider_imports_in_stage1():
-    forbidden = {"openai", "anthropic", "ollama", "httpx", "requests", "google", "gemini"}
+def test_no_external_http_sdks_in_llm_package():
+    """Stage 2 may import local providers (ollama.py); forbid vendor SDKs."""
+    forbidden = {"openai", "anthropic", "httpx", "requests", "google.generativeai", "gemini"}
     for path in LLM_DIR.rglob("*.py"):
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom):
                 mod = (node.module or "").lower()
+                # relative package imports (.ollama) are allowed
+                if mod.startswith("."):
+                    continue
                 for bad in forbidden:
-                    assert bad not in mod.split("."), f"{path.name} imports {mod}"
+                    assert bad not in mod, f"{path.name} imports {mod}"
             elif isinstance(node, ast.Import):
                 for alias in node.names:
+                    low = alias.name.lower()
                     for bad in forbidden:
-                        assert bad not in alias.name.lower().split(".")
+                        assert bad not in low, f"{path.name} imports {alias.name}"
 
 
 def test_tools_field_present_but_unused():
