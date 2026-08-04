@@ -6,7 +6,12 @@ Does not modify Execution Layer (Planner / ToolRouter / Dispatcher).
 
 from .discord import DiscordAdapter, MockDiscordTransport
 from .framework import FrameworkAdapter, MockFrameworkTransport
-from .github import GitHubAdapter, MockGitHubTransport
+from .github import (
+    GitHubAdapter,
+    LiveGitHubTransport,
+    MockGitHubTransport,
+    execute_github_gated,
+)
 from .n8n import MockN8NTransport, N8NAdapter
 from .railway import MockRailwayTransport, RailwayAdapter
 from .result import AdapterResult, AdapterStatus
@@ -17,6 +22,7 @@ __all__ = [
     "DiscordAdapter",
     "FrameworkAdapter",
     "GitHubAdapter",
+    "LiveGitHubTransport",
     "MockDiscordTransport",
     "MockFrameworkTransport",
     "MockGitHubTransport",
@@ -24,4 +30,5 @@ __all__ = [
     "MockRailwayTransport",
     "N8NAdapter",
     "RailwayAdapter",
+    "execute_github_gated",
 ]

@@ -25,6 +25,11 @@ from .contracts import (
 _TOOL_TO_CAPABILITY: dict[str, str] = {
     "GitHub.create_pr": "github.write",
     "GitHub.create_issue": "github.write",
+    "GitHub.comment_pr": "github.write",
+    "GitHub.comment_issue": "github.write",
+    "GitHub.read_repo": "github.read",
+    "GitHub.read_pr": "github.read",
+    "GitHub.list_branches": "github.read",
     "Discord.send": "discord.send",
     "Framework.run": "framework.execute",
     "Railway.deploy": "railway.deploy",
