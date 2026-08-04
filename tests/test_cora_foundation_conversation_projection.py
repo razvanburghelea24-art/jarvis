@@ -7,12 +7,14 @@ from src.jarvis.cora_foundation.conversation import (
     LifecyclePhase,
     PresentationHint,
     project_conversation_state,
+    reset_conversation_event_journal_for_tests,
 )
 from src.jarvis.cora_foundation.snapshot import SnapshotService, reset_snapshot_service_for_tests
 
 
 def setup_function():
     reset_snapshot_service_for_tests()
+    reset_conversation_event_journal_for_tests()
 
 
 def _state(presentation: str, *, lifecycle: str | None = None) -> ConversationState:

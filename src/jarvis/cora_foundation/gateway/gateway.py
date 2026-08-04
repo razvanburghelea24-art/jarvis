@@ -85,6 +85,19 @@ class CommandGateway:
         envelope = CommandEnvelope(text=text, source=source, metadata=dict(metadata or {}))
         return self._pipeline.run(envelope, enabled=self._enabled)
 
+    def accept_conversation_request(self, payload: dict | None):
+        """
+        Conversation transport accept only:
+        ConversationRequest → Validator → Audit → STOP.
+        Never invokes Planner / Engine / LLM / tools / Memory.
+        """
+        from .conversation_accept import ConversationAcceptResult, accept_conversation_request
+
+        result: ConversationAcceptResult = accept_conversation_request(
+            payload, audit=self._audit
+        )
+        return result
+
 
 _GW: CommandGateway | None = None
 _GW_LOCK = threading.Lock()

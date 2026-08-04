@@ -57,19 +57,57 @@ class SnapshotService:
         self._lock = threading.RLock()
         self._last: UnifiedSnapshot | None = None
         self._conversation_state: Any | None = None
+        self._conversation_events = None  # lazy ConversationEventJournal
 
     @property
     def enabled(self) -> bool:
         return self._enabled
 
+    def _event_journal(self):
+        if self._conversation_events is None:
+            from src.jarvis.cora_foundation.conversation.events import (
+                get_conversation_event_journal,
+            )
+
+            self._conversation_events = get_conversation_event_journal()
+        return self._conversation_events
+
     def set_conversation_state(self, state: Any | None) -> None:
-        """Inject ConversationState for Snapshot projection (Engine will call later)."""
+        """Inject ConversationState for Snapshot projection + emit timeline event."""
+        from src.jarvis.cora_foundation.conversation.contracts import (
+            ConversationState,
+            validate_state,
+        )
+
+        validated: ConversationState | None
+        if state is None:
+            validated = None
+            presentation = None
+            request_id = None
+            workspace_id = None
+            session_id = None
+            lifecycle = None
+        else:
+            validated = state if isinstance(state, ConversationState) else validate_state(state)
+            presentation = validated.presentation.value
+            request_id = validated.request_id
+            workspace_id = validated.workspace_id
+            session_id = validated.session_id
+            lifecycle = validated.lifecycle.value
+
         with self._lock:
-            self._conversation_state = state
+            self._conversation_state = validated
+        self._event_journal().record_state(
+            presentation=presentation if presentation is not None else "Idle",
+            request_id=request_id,
+            workspace_id=workspace_id,
+            session_id=session_id,
+            lifecycle=lifecycle,
+            force=state is None,
+        )
 
     def clear_conversation_state(self) -> None:
-        with self._lock:
-            self._conversation_state = None
+        self.set_conversation_state(None)
 
     def build(self) -> UnifiedSnapshot:
         if not self._enabled:
@@ -415,15 +453,17 @@ class SnapshotService:
         with self._lock:
             state = self._conversation_state
         if state is None:
-            return empty_conversation_section()
-        try:
-            return project_conversation_state(state)
-        except Exception as exc:  # noqa: BLE001 — snapshot must not crash
             section = empty_conversation_section()
-            section["source"] = "bridge_stub"
-            section["health"] = "degraded"
-            section["detail"] = f"conversation projection error: {exc}"
-            return section
+        else:
+            try:
+                section = project_conversation_state(state)
+            except Exception as exc:  # noqa: BLE001 — snapshot must not crash
+                section = empty_conversation_section()
+                section["source"] = "bridge_stub"
+                section["health"] = "degraded"
+                section["detail"] = f"conversation projection error: {exc}"
+        section["events"] = self._event_journal().to_timeline(limit=40)
+        return section
 
     def _pending(self, name: str, status: str) -> dict[str, Any]:
         return {

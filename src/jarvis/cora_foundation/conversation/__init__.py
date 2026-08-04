@@ -1,4 +1,4 @@
-"""Conversation package — contracts + Snapshot projection (no Engine)."""
+"""Conversation package — contracts + projection + event timeline (no Engine)."""
 
 from .contracts import (
     SCHEMA_FAMILY,
@@ -22,6 +22,13 @@ from .contracts import (
     validate_state,
     to_canonical_json,
     from_canonical_json,
+)
+from .events import (
+    EVENT_CONVERSATION_STATE_CHANGED,
+    ConversationEventJournal,
+    ConversationStateChanged,
+    get_conversation_event_journal,
+    reset_conversation_event_journal_for_tests,
 )
 from .projection import empty_conversation_section, project_conversation_state
 
@@ -49,4 +56,9 @@ __all__ = [
     "from_canonical_json",
     "empty_conversation_section",
     "project_conversation_state",
+    "EVENT_CONVERSATION_STATE_CHANGED",
+    "ConversationEventJournal",
+    "ConversationStateChanged",
+    "get_conversation_event_journal",
+    "reset_conversation_event_journal_for_tests",
 ]
