@@ -81,6 +81,16 @@ from .harness import (
     FakeStateEmitter,
     HarnessResult,
 )
+from .memory import (
+    ActiveWorkspaceContext,
+    ConversationMemory,
+    ConversationMemoryProvider,
+    ConversationMemorySnapshot,
+    ConversationTurn,
+    OpenQuestion,
+    get_conversation_memory,
+    reset_conversation_memory_for_tests,
+)
 from .projection import empty_conversation_section, project_conversation_state
 
 __all__ = [
@@ -152,6 +162,14 @@ __all__ = [
     "StubCoreMemoryProvider",
     "StubRuntimeSnapshotProvider",
     "StubWorkspaceProvider",
+    "ActiveWorkspaceContext",
+    "ConversationMemory",
+    "ConversationMemoryProvider",
+    "ConversationMemorySnapshot",
+    "ConversationTurn",
+    "OpenQuestion",
+    "get_conversation_memory",
+    "reset_conversation_memory_for_tests",
     "ConversationHarness",
     "FakeContextBuilder",
     "FakeDecisionEngine",
