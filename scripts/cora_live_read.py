@@ -74,6 +74,11 @@ def _slim_data(adapter: str, op: str, data: Any) -> Any:
 
 
 def _out(payload: dict[str, Any], code: int = 0) -> int:
+    # Windows consoles (cp1250/cp1252) blow up on Discord channel names — force UTF-8.
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
+    except Exception:
+        pass
     print(json.dumps(payload, ensure_ascii=False))
     return code
 
