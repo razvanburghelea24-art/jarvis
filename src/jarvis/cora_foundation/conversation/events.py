@@ -1,6 +1,7 @@
-"""Conversation event timeline — state transitions only.
+"""Conversation presentation timeline — ConversationStateChanged only.
 
-No Engine, Planner, LLM, or tool routing. Events are for Timeline / Debug / Audit / Replay.
+Separate from ConversationEvents (engine conversation journal) and Audit (system).
+No Engine, Planner, LLM, or tool routing. Used for presentation Timeline / Debug / Replay.
 """
 
 from __future__ import annotations

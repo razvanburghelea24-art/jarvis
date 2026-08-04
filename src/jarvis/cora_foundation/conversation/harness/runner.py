@@ -11,7 +11,9 @@ from ..contracts import ConversationRequest, ConversationResponse, ConversationS
 from ..engine import (
     ConversationEngine,
     ContextBuilder,
+    ConversationEvents,
     DecisionEngine,
+    EventJournal,
     RequestValidator,
     ResponseBuilder,
     StateEmitter,
@@ -26,6 +28,7 @@ class HarnessResult:
     response: ConversationResponse | None = None
     states: list[ConversationState] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    conversation_events: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -34,6 +37,8 @@ class HarnessResult:
             "response": self.response.to_canonical_dict() if self.response else None,
             "states": [s.to_canonical_dict() for s in self.states],
             "errors": list(self.errors),
+            "conversation_events": list(self.conversation_events),
+            # Legacy presentation timeline (ConversationStateChanged) — not ConversationEvents
             "events": get_conversation_event_journal().to_timeline(limit=40),
         }
 
@@ -43,14 +48,19 @@ class ConversationHarness:
     Banc de test:
       ConversationRequest → Gateway Accept → Engine(real steps) → Response
 
-    ConversationEvents journal is wired via StateEmitter on_state (not inside StateEmitter).
+    ConversationEvents → EventJournal via on_event (Engine does not know listeners).
+    Legacy ConversationStateChanged timeline remains separate (presentation only).
     """
 
     def __init__(self, *, audit: AuditJournal | None = None) -> None:
         self.audit = audit or AuditJournal()
+        self.event_journal = EventJournal()
+
+        def _on_conversation_event(event) -> None:
+            self.event_journal.record(event)
 
         def _on_state(state: ConversationState) -> None:
-            # Harness-owned Timeline hook until ConversationEvents module lands
+            # Legacy presentation timeline — separate from ConversationEvents journal
             get_conversation_event_journal().record_state(
                 presentation=state.presentation.value,
                 request_id=state.request_id,
@@ -59,6 +69,7 @@ class ConversationHarness:
                 lifecycle=state.lifecycle.value,
             )
 
+        self.conversation_events = ConversationEvents(on_event=_on_conversation_event)
         self.emitter = StateEmitter(on_state=_on_state)
         self.engine = ConversationEngine(
             validator=RequestValidator(),
@@ -66,11 +77,19 @@ class ConversationHarness:
             decision_engine=DecisionEngine(),
             response_builder=ResponseBuilder(),
             state_emitter=self.emitter,
+            conversation_events=self.conversation_events,
         )
         self.engine.SKELETON = True
 
     def accept(self, payload: Mapping[str, Any] | ConversationRequest | None) -> ConversationAcceptResult:
-        return accept_conversation_request(payload, audit=self.audit)
+        result = accept_conversation_request(payload, audit=self.audit)
+        if result.ok and result.request is not None:
+            self.conversation_events.request_accepted(
+                result.request,
+                code=result.code,
+                status_code=result.status_code,
+            )
+        return result
 
     def emit_state_sequence(
         self,
@@ -93,6 +112,7 @@ class ConversationHarness:
                 ok=False,
                 gateway=gateway,
                 errors=list(gateway.errors) or [gateway.message],
+                conversation_events=self.event_journal.to_list(),
             )
 
         request = gateway.request
@@ -105,9 +125,16 @@ class ConversationHarness:
                 gateway=gateway,
                 states=states,
                 errors=[str(exc)],
+                conversation_events=self.event_journal.to_list(),
             )
 
-        return HarnessResult(ok=True, gateway=gateway, response=response, states=states)
+        return HarnessResult(
+            ok=True,
+            gateway=gateway,
+            response=response,
+            states=states,
+            conversation_events=self.event_journal.to_list(),
+        )
 
     def timeline_has_state_changed(self, *, current_state: str | None = None) -> bool:
         events = get_conversation_event_journal().events()

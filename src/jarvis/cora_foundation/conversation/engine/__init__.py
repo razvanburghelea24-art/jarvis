@@ -14,6 +14,19 @@ from .context_providers import (
     StubRuntimeSnapshotProvider,
     StubWorkspaceProvider,
 )
+from .conversation_events import (
+    CONTEXT_BUILT,
+    CONVERSATION_COMPLETED,
+    ConversationEvent,
+    ConversationEvents,
+    DECISION_MADE,
+    EventJournal,
+    PIPELINE_ORDER,
+    REQUEST_ACCEPTED,
+    REQUEST_VALIDATED,
+    RESPONSE_BUILT,
+    STATE_EMITTED,
+)
 from .decision_engine import DecisionEngine
 from .engine import ConversationEngine, SkeletonNotImplemented
 from .request_validator import (
@@ -32,9 +45,14 @@ from .response_builder import ResponseBuilder
 from .state_emitter import StateEmitter
 
 __all__ = [
+    "CONTEXT_BUILT",
+    "CONVERSATION_COMPLETED",
     "ConversationEngine",
+    "ConversationEvent",
+    "ConversationEvents",
     "ContextBuilder",
     "DEFAULT_LIMITS",
+    "DECISION_MADE",
     "DecisionEngine",
     "ERROR_INVALID_JSON",
     "ERROR_INVALID_REQUEST",
@@ -43,10 +61,16 @@ __all__ = [
     "ERROR_UNKNOWN_VERSION",
     "ERROR_WRONG_FAMILY",
     "ERROR_WRONG_KIND",
+    "EventJournal",
+    "PIPELINE_ORDER",
+    "REQUEST_ACCEPTED",
+    "REQUEST_VALIDATED",
+    "RESPONSE_BUILT",
     "RequestValidationError",
     "RequestValidationResult",
     "RequestValidator",
     "ResponseBuilder",
+    "STATE_EMITTED",
     "SkeletonNotImplemented",
     "StateEmitter",
     "StubConversationMemoryProvider",
