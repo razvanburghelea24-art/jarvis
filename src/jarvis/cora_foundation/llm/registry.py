@@ -1,13 +1,22 @@
-"""Provider registry — adapters + ModelCapability (Router input later)."""
+"""Provider registry — adapters + ModelCapability (Router input)."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import json
+from dataclasses import dataclass, replace
 
 from .adapter import LLMAdapter
-from .capabilities import CAPABILITY_MOCK, CAPABILITY_OLLAMA_DEFAULT, ModelCapability
+from .capabilities import (
+    CAPABILITY_CLAUDE_DEFAULT,
+    CAPABILITY_MOCK,
+    CAPABILITY_OLLAMA_DEFAULT,
+    CAPABILITY_OPENAI_DEFAULT,
+    ModelCapability,
+)
+from .claude_provider import ClaudeProvider
 from .mock import MockLLMProvider
 from .ollama import OllamaProvider
+from .openai_provider import OpenAIProvider
 
 
 @dataclass(frozen=True)
@@ -27,23 +36,9 @@ class ProviderRegistry:
         self._entries: dict[str, ProviderEntry] = {}
 
     def register(self, adapter: LLMAdapter, capability: ModelCapability) -> None:
-        if adapter.provider_id != capability.provider_id and capability.provider_id:
-            # allow capability.provider_id empty → fill from adapter
-            pass
         cap = capability
         if not cap.provider_id:
-            cap = ModelCapability(
-                reasoning=cap.reasoning,
-                coding=cap.coding,
-                vision=cap.vision,
-                speed=cap.speed,
-                offline=cap.offline,
-                streaming=cap.streaming,
-                tool_calling=cap.tool_calling,
-                cost=cap.cost,
-                provider_id=adapter.provider_id,
-                model_id=cap.model_id,
-            )
+            cap = replace(cap, provider_id=adapter.provider_id)
         self._entries[adapter.provider_id] = ProviderEntry(adapter=adapter, capability=cap)
 
     def get(self, provider_id: str) -> ProviderEntry:
@@ -58,25 +53,77 @@ class ProviderRegistry:
     def capabilities(self) -> list[ModelCapability]:
         return [e.capability for e in self._entries.values()]
 
+    def entries(self) -> list[ProviderEntry]:
+        return list(self._entries.values())
+
 
 def default_dev_registry(
     *,
     ollama_model: str = "llama3.2",
     ollama_base_url: str = "http://127.0.0.1:11434",
 ) -> ProviderRegistry:
-    """Dev default: Mock + Ollama (Ollama = offline default for real calls)."""
+    """Dev default: Mock + Ollama."""
     reg = ProviderRegistry()
     mock = MockLLMProvider()
     reg.register(mock, CAPABILITY_MOCK)
     ollama = OllamaProvider(model=ollama_model, base_url=ollama_base_url)
     reg.register(
         ollama,
-        ModelCapability(
-            **{
-                **CAPABILITY_OLLAMA_DEFAULT.to_dict(),
-                "model_id": ollama_model,
-                "provider_id": "ollama",
-            }
-        ),
+        replace(CAPABILITY_OLLAMA_DEFAULT, model_id=ollama_model, provider_id="ollama"),
     )
     return reg
+
+
+def routing_test_registry() -> ProviderRegistry:
+    """Mock + Ollama + OpenAI + Claude with injectable openers (Router tests)."""
+
+    def ollama_ok(url, data, timeout):
+        return json.dumps(
+            {
+                "model": "llama3.2",
+                "message": {"role": "assistant", "content": "ollama"},
+                "done": True,
+                "done_reason": "stop",
+                "prompt_eval_count": 1,
+                "eval_count": 1,
+            }
+        ).encode()
+
+    def openai_ok(url, data, timeout, headers=None):
+        return json.dumps(
+            {
+                "model": "gpt-4o-mini",
+                "choices": [
+                    {
+                        "message": {"role": "assistant", "content": "openai"},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+            }
+        ).encode()
+
+    def claude_ok(url, data, timeout, headers=None):
+        return json.dumps(
+            {
+                "model": "claude-sonnet-4-20250514",
+                "content": [{"type": "text", "text": "claude"}],
+                "stop_reason": "end_turn",
+                "usage": {"input_tokens": 1, "output_tokens": 1},
+            }
+        ).encode()
+
+    reg = ProviderRegistry()
+    reg.register(MockLLMProvider(), CAPABILITY_MOCK)
+    ollama = OllamaProvider(opener=ollama_ok)
+    reg.register(ollama, replace(CAPABILITY_OLLAMA_DEFAULT, availability=True))
+    openai = OpenAIProvider(api_key="test", opener=openai_ok)
+    reg.register(openai, replace(CAPABILITY_OPENAI_DEFAULT, availability=True))
+    claude = ClaudeProvider(api_key="test", opener=claude_ok)
+    reg.register(claude, replace(CAPABILITY_CLAUDE_DEFAULT, availability=True))
+    return reg
+
+
+def full_provider_registry(**kwargs) -> ProviderRegistry:
+    """Alias — full set for routing / integration tests."""
+    return routing_test_registry()
