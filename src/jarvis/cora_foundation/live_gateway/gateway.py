@@ -301,8 +301,13 @@ class LiveExecutionGateway:
 
     @staticmethod
     def _looks_like_write(request: DispatchRequest) -> bool:
-        tool = request.tool.lower()
-        write_tokens = (
+        # Segment match only — "heal" must not match "Framework.health".
+        parts = {
+            p
+            for p in request.tool.lower().replace("-", "_").replace(".", "_").split("_")
+            if p
+        }
+        write_tokens = {
             "create",
             "send",
             "deploy",
@@ -316,5 +321,5 @@ class LiveExecutionGateway:
             "kick",
             "heal",
             "broadcast",
-        )
-        return any(t in tool for t in write_tokens)
+        }
+        return bool(parts & write_tokens)

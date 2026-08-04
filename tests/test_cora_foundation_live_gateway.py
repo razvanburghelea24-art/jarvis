@@ -204,3 +204,27 @@ def test_harness_dispatcher_to_gateway():
     )
     assert blocked.decision == GatewayVerdict.DENY
     assert blocked.reason == "E_STOP"
+
+
+def test_framework_health_not_confused_with_heal_write():
+    """Regression: substring 'heal' inside 'health' must not force GRANTED."""
+    d = LiveExecutionGateway().evaluate(
+        _req(
+            tool="Framework.health",
+            capability="framework.read",
+            approval=ApprovalState.NOT_REQUIRED,
+        ),
+        _ok_ctx(mode=ExecutionMode.LIVE),
+    )
+    assert d.decision == GatewayVerdict.ALLOW
+
+    write = LiveExecutionGateway().evaluate(
+        _req(
+            tool="Framework.heal",
+            capability="framework.execute",
+            approval=ApprovalState.NOT_REQUIRED,
+        ),
+        _ok_ctx(mode=ExecutionMode.LIVE),
+    )
+    assert write.decision == GatewayVerdict.DENY
+    assert write.reason == "APPROVAL_MISSING"

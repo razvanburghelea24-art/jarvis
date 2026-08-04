@@ -26,9 +26,15 @@ def _req(
     payload: dict | None = None,
     capability: str | None = None,
 ) -> DispatchRequest:
-    write = any(
-        x in tool
-        for x in (
+    # Segment match — do not treat Framework.health as Framework.heal
+    parts = {
+        p
+        for p in tool.lower().replace("-", "_").replace(".", "_").split("_")
+        if p
+    }
+    write = bool(
+        parts
+        & {
             "broadcast",
             "heal",
             "kick",
@@ -39,7 +45,7 @@ def _req(
             "weather_set",
             "points",
             "economy",
-        )
+        }
     )
     return DispatchRequest(
         dispatch_id=DispatchRequest.new_id(),
