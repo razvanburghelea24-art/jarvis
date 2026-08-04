@@ -78,11 +78,12 @@ def test_memory_provider_feeds_context_builder():
         }
     )
     ctx = builder.build(req)
-    turns = ctx.conversation.get("turns") or []
+    mem_frag = ctx.conversation.get("memory") or {}
+    turns = mem_frag.get("turns") or []
     assert len(turns) >= 2
     assert turns[0]["text"] == "hello"
-    assert ctx.conversation.get("provider") == "conversation_memory"
-    assert ctx.conversation.get("active_workspace", {}).get("workspace_id") == "ws-nymods"
+    assert mem_frag.get("provider") == "conversation_memory"
+    assert mem_frag.get("active_workspace", {}).get("workspace_id") == "ws-nymods"
 
 
 def test_sessions_are_isolated():
