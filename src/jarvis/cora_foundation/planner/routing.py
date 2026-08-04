@@ -29,6 +29,10 @@ _PLAN_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"(f[ăa]\s+un\s+plan|make\s+a\s+plan|create\s+a\s+plan|planific[ăa])", re.I),
     re.compile(r"(pas\s*cu\s*pas|step\s*by\s*step|multi[\s-]?step|pa[sș]i\s+multipli)", re.I),
     re.compile(r"(release|ship|roll\s*out|rollback)", re.I),
+    # World-changing intents must become PlannerDecision first
+    re.compile(r"(creeaz[ăa]|create).{0,40}(pr|pull\s*request|github)", re.I),
+    re.compile(r"(trimite|send).{0,40}discord", re.I),
+    re.compile(r"(github|discord|railway).{0,20}(pr|deploy|mesaj|message|anun)", re.I),
 )
 
 _DIRECT_PATTERNS: tuple[re.Pattern[str], ...] = (

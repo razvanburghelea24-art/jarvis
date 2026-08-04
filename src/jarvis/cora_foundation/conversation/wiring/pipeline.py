@@ -20,6 +20,7 @@ from ...llm import (
 )
 from ...llm.from_context import DEFAULT_SYSTEM
 from ...planner import PlannerDecision, PlannerRouter
+from ...tool_routing import ToolPlan, ToolRouter
 from ...workspace import WorkspaceEngine, WorkspaceEngineProvider
 from ..contracts import (
     ConversationContext,
@@ -57,6 +58,7 @@ class WiredTurnResult:
     context: ConversationContext | None = None
     decision: ConversationDecision | None = None
     planner: PlannerDecision | None = None
+    tool_plan: ToolPlan | None = None
     route: RouteDecision | None = None
     llm: LLMResponse | None = None
     response: ConversationResponse | None = None
@@ -73,6 +75,7 @@ class WiredTurnResult:
                 dict(self.decision.tool_intent).get("label") if self.decision else None
             ),
             "planner": self.planner.to_canonical_dict() if self.planner else None,
+            "tool_plan": self.tool_plan.to_canonical_dict() if self.tool_plan else None,
             "route": self.route.to_dict() if self.route else None,
             "llm_provider": self.llm.provider if self.llm else None,
             "response": self.response.to_canonical_dict() if self.response else None,
@@ -107,6 +110,7 @@ class WiredConversationPipeline:
         events: ConversationEvents | None = None,
         event_journal: EventJournal | None = None,
         planner_router: PlannerRouter | None = None,
+        tool_router: ToolRouter | None = None,
         chunk_size: int = 24,
     ) -> None:
         self.memory = memory or get_conversation_memory()
@@ -116,6 +120,7 @@ class WiredConversationPipeline:
         self.decision_engine = decision_engine or DecisionEngine()
         self.response_builder = response_builder or ResponseBuilder()
         self.planner_router = planner_router or PlannerRouter()
+        self.tool_router = tool_router or ToolRouter()
         self.event_journal = event_journal or EventJournal()
 
         def _on_event(event) -> None:
@@ -183,6 +188,7 @@ class WiredConversationPipeline:
         planner = self.planner_router.route(
             request, context, decision, workspace=self.workspace
         )
+        tool_plan = self.tool_router.route(planner, request)
 
         route: RouteDecision | None = None
         llm: LLMResponse | None = None
@@ -200,6 +206,8 @@ class WiredConversationPipeline:
                     "route_reason": route.reason,
                     "planner_required": planner.required,
                     "planner_route": planner.route.value,
+                    "tool_plan_empty": tool_plan.empty,
+                    "tool_approval_required": tool_plan.approval_required,
                 },
             )
             adapter = self.router.registry.get(route.provider_id).adapter
@@ -252,6 +260,7 @@ class WiredConversationPipeline:
             context=context,
             decision=decision,
             planner=planner,
+            tool_plan=tool_plan,
             route=route,
             llm=llm,
             response=response,

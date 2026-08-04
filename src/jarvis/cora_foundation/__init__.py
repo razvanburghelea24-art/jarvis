@@ -13,6 +13,7 @@ from . import memory
 from . import orchestrator
 from . import planner
 from . import snapshot
+from . import tool_routing
 from . import workspace
 
 __all__ = [
@@ -29,5 +30,6 @@ __all__ = [
     "orchestrator",
     "planner",
     "snapshot",
+    "tool_routing",
     "workspace",
 ]
