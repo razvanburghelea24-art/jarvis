@@ -20,6 +20,7 @@ _CAP_TO_TOOL: dict[str, tuple[str, str, ToolRisk, tuple[str, ...]]] = {
     "deploy": ("Railway.deploy", "railway.deploy", ToolRisk.CRITICAL, ()),
     "railway": ("Railway.deploy", "railway.deploy", ToolRisk.CRITICAL, ()),
     "framework": ("Framework.run", "framework.execute", ToolRisk.HIGH, ()),
+    "n8n": ("n8n.execute_workflow", "n8n.execute", ToolRisk.HIGH, ()),
     "filesystem": ("Filesystem.edit", "filesystem.write", ToolRisk.MEDIUM, ("Filesystem.read",)),
     "computer_operator": ("ComputerOperator.act", "computer_operator.control", ToolRisk.CRITICAL, ()),
 }
@@ -29,6 +30,7 @@ _TEXT_HINTS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"discord", re.I), "discord"),
     (re.compile(r"(railway|deploy)", re.I), "deploy"),
     (re.compile(r"framework", re.I), "framework"),
+    (re.compile(r"\bn8n\b", re.I), "n8n"),
     (re.compile(r"(fi[sș]ier|filesystem|edit\s+file|modific[ăa]\s+fi)", re.I), "filesystem"),
 )
 

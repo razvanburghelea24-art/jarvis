@@ -28,6 +28,7 @@ _TOOL_TO_CAPABILITY: dict[str, str] = {
     "Discord.send": "discord.send",
     "Framework.run": "framework.execute",
     "Railway.deploy": "railway.deploy",
+    "n8n.execute_workflow": "n8n.execute",
     "Filesystem.edit": "filesystem.write",
     "Filesystem.read": "filesystem.read",
     "ComputerOperator.act": "computer_operator.control",

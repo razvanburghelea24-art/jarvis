@@ -33,6 +33,8 @@ _PLAN_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"(creeaz[ăa]|create).{0,40}(pr|pull\s*request|github)", re.I),
     re.compile(r"(trimite|send).{0,40}discord", re.I),
     re.compile(r"(github|discord|railway).{0,20}(pr|deploy|mesaj|message|anun)", re.I),
+    re.compile(r"(n8n|workflow).{0,40}(ruleaz[ăa]|execute|run|trigger)", re.I),
+    re.compile(r"(ruleaz[ăa]|execute|run).{0,40}(n8n|workflow)", re.I),
 )
 
 _DIRECT_PATTERNS: tuple[re.Pattern[str], ...] = (
@@ -45,6 +47,7 @@ _CAP_HINTS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"\b(github|pr|pull\s*request)\b", re.I), "github"),
     (re.compile(r"\bdiscord\b", re.I), "discord"),
     (re.compile(r"\b(deploy|railway)\b", re.I), "deploy"),
+    (re.compile(r"\b(n8n|workflow)\b", re.I), "n8n"),
     (re.compile(r"\b(file|fi[sș]ier|edit|modific[ăa])\b", re.I), "filesystem"),
     (re.compile(r"\b(computer|desktop|mouse|keyboard|operator)\b", re.I), "computer_operator"),
     (re.compile(r"\b(analyz|analiz)\b", re.I), "analysis"),
