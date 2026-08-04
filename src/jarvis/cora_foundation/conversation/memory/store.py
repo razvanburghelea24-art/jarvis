@@ -50,12 +50,17 @@ class ConversationMemory:
                 prev = self._active[session_id]
                 self._active[session_id] = ActiveWorkspaceContext(
                     workspace_id=workspace_id,
+                    workspace_name=prev.workspace_name,
+                    workspace_type=prev.workspace_type,
                     current_goal=prev.current_goal,
+                    active_plan=prev.active_plan,
                     active_tasks=prev.active_tasks,
-                    current_plan=prev.current_plan,
-                    current_provider=prev.current_provider,
-                    preferred_model=prev.preferred_model,
                     open_questions=prev.open_questions,
+                    preferred_provider=prev.preferred_provider,
+                    preferred_model=prev.preferred_model,
+                    capabilities=prev.capabilities,
+                    conversation_scope=prev.conversation_scope,
+                    created_at=prev.created_at,
                     metadata=dict(prev.metadata),
                 )
 

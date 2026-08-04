@@ -51,14 +51,14 @@ def test_active_workspace_context_contract():
         workspace_id="ws-nymods",
         current_goal="ship overlay",
         active_tasks=("fix-a", "fix-b"),
-        current_plan=None,
-        current_provider="ollama",
+        active_plan=None,
+        preferred_provider="ollama",
         preferred_model="llama3.2",
         open_questions=("clarify path?",),
     )
     raw = ctx.to_dict()
     assert raw["workspace_id"] == "ws-nymods"
-    assert raw["current_provider"] == "ollama"
+    assert raw["preferred_provider"] == "ollama"
     assert json.dumps(raw)
     with pytest.raises(Exception):
         ctx.workspace_id = "x"  # type: ignore[misc]

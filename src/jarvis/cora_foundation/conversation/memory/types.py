@@ -1,6 +1,6 @@
 """Conversation Memory types — current session turns only.
 
-Not Workspace Memory. Not Core Memory. Not Audit.
+ActiveWorkspaceContext SSOT lives in cora_foundation.workspace.context
 """
 
 from __future__ import annotations
@@ -11,6 +11,14 @@ from typing import Any, Mapping
 from uuid import uuid4
 
 from ..contracts.schema import freeze_mapping
+from ...workspace.context import ActiveWorkspaceContext
+
+__all__ = [
+    "ActiveWorkspaceContext",
+    "ConversationMemorySnapshot",
+    "ConversationTurn",
+    "OpenQuestion",
+]
 
 
 def _now() -> str:
@@ -19,10 +27,8 @@ def _now() -> str:
 
 @dataclass(frozen=True)
 class ConversationTurn:
-    """One user or assistant utterance in the current conversation."""
-
     turn_id: str
-    role: str  # user | assistant | system
+    role: str
     text: str
     timestamp: str
     request_id: str | None = None
@@ -31,8 +37,6 @@ class ConversationTurn:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "metadata", freeze_mapping(self.metadata))
-        object.__setattr__(self, "role", str(self.role))
-        object.__setattr__(self, "text", str(self.text))
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -67,11 +71,9 @@ class ConversationTurn:
 
 @dataclass(frozen=True)
 class OpenQuestion:
-    """Clarification / review still waiting on Owner."""
-
     question_id: str
     text: str
-    kind: str  # clarification | review | other
+    kind: str
     request_id: str | None = None
     created_at: str = ""
     metadata: Mapping[str, Any] = None  # type: ignore[assignment]
@@ -93,50 +95,7 @@ class OpenQuestion:
 
 
 @dataclass(frozen=True)
-class ActiveWorkspaceContext:
-    """
-    Active workspace slice for Memory · Router · Planner (later).
-
-    Filled by Workspace Engine in the next milestone; introduced now as contract.
-    """
-
-    workspace_id: str
-    current_goal: str = ""
-    active_tasks: tuple[str, ...] = ()
-    current_plan: str | None = None
-    current_provider: str | None = None
-    preferred_model: str | None = None
-    open_questions: tuple[str, ...] = ()
-    metadata: Mapping[str, Any] = None  # type: ignore[assignment]
-
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "metadata", freeze_mapping(self.metadata))
-        if isinstance(self.active_tasks, list):
-            object.__setattr__(self, "active_tasks", tuple(self.active_tasks))
-        if isinstance(self.open_questions, list):
-            object.__setattr__(self, "open_questions", tuple(self.open_questions))
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "workspace_id": self.workspace_id,
-            "current_goal": self.current_goal,
-            "active_tasks": list(self.active_tasks),
-            "current_plan": self.current_plan,
-            "current_provider": self.current_provider,
-            "preferred_model": self.preferred_model,
-            "open_questions": list(self.open_questions),
-            "metadata": dict(self.metadata),
-        }
-
-    @staticmethod
-    def empty(workspace_id: str) -> ActiveWorkspaceContext:
-        return ActiveWorkspaceContext(workspace_id=workspace_id)
-
-
-@dataclass(frozen=True)
 class ConversationMemorySnapshot:
-    """Read model for ContextBuilder / Router (later wiring)."""
-
     session_id: str
     workspace_id: str
     turns: tuple[ConversationTurn, ...]
@@ -156,7 +115,6 @@ class ConversationMemorySnapshot:
         }
 
     def as_context_fragment(self, *, max_turns: int = 20) -> dict[str, Any]:
-        """Shape expected by ConversationContext.conversation window."""
         recent = self.turns[-max_turns:] if max_turns > 0 else self.turns
         return {
             "turns": [t.to_dict() for t in recent],

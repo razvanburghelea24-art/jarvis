@@ -13,6 +13,7 @@ from . import memory
 from . import orchestrator
 from . import planner
 from . import snapshot
+from . import workspace
 
 __all__ = [
     "agents",
@@ -28,4 +29,5 @@ __all__ = [
     "orchestrator",
     "planner",
     "snapshot",
+    "workspace",
 ]
