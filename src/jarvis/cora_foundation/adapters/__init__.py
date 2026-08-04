@@ -23,7 +23,12 @@ from .github import (
     execute_github_gated,
 )
 from .n8n import MockN8NTransport, N8NAdapter
-from .railway import MockRailwayTransport, RailwayAdapter
+from .railway import (
+    LiveRailwayTransport,
+    MockRailwayTransport,
+    RailwayAdapter,
+    execute_railway_gated,
+)
 from .result import AdapterResult, AdapterStatus
 
 __all__ = [
@@ -35,6 +40,7 @@ __all__ = [
     "LiveDiscordTransport",
     "LiveFrameworkTransport",
     "LiveGitHubTransport",
+    "LiveRailwayTransport",
     "MockDiscordTransport",
     "MockFrameworkTransport",
     "MockGitHubTransport",
@@ -45,4 +51,5 @@ __all__ = [
     "execute_discord_gated",
     "execute_framework_gated",
     "execute_github_gated",
+    "execute_railway_gated",
 ]
