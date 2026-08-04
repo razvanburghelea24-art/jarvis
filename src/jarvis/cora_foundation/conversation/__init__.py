@@ -39,6 +39,15 @@ from .events import (
     get_conversation_event_journal,
     reset_conversation_event_journal_for_tests,
 )
+from .harness import (
+    ConversationHarness,
+    FakeContextBuilder,
+    FakeDecisionEngine,
+    FakeRequestValidator,
+    FakeResponseBuilder,
+    FakeStateEmitter,
+    HarnessResult,
+)
 from .projection import empty_conversation_section, project_conversation_state
 
 __all__ = [
@@ -77,4 +86,11 @@ __all__ = [
     "ResponseBuilder",
     "SkeletonNotImplemented",
     "StateEmitter",
+    "ConversationHarness",
+    "FakeContextBuilder",
+    "FakeDecisionEngine",
+    "FakeRequestValidator",
+    "FakeResponseBuilder",
+    "FakeStateEmitter",
+    "HarnessResult",
 ]
