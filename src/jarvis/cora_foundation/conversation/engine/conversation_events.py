@@ -24,6 +24,10 @@ DECISION_MADE = "DECISION_MADE"
 STATE_EMITTED = "STATE_EMITTED"
 RESPONSE_BUILT = "RESPONSE_BUILT"
 CONVERSATION_COMPLETED = "CONVERSATION_COMPLETED"
+STREAM_STARTED = "STREAM_STARTED"
+STREAM_CHUNK = "STREAM_CHUNK"
+STREAM_COMPLETED = "STREAM_COMPLETED"
+STREAM_CANCELLED = "STREAM_CANCELLED"
 
 PIPELINE_ORDER = (
     REQUEST_ACCEPTED,
@@ -162,3 +166,15 @@ class ConversationEvents:
         self, request: ConversationRequest, **payload: Any
     ) -> ConversationEvent:
         return self.emit(CONVERSATION_COMPLETED, request, payload=payload)
+
+    def stream_started(self, request: ConversationRequest, **payload: Any) -> ConversationEvent:
+        return self.emit(STREAM_STARTED, request, payload=payload)
+
+    def stream_chunk(self, request: ConversationRequest, **payload: Any) -> ConversationEvent:
+        return self.emit(STREAM_CHUNK, request, payload=payload)
+
+    def stream_completed(self, request: ConversationRequest, **payload: Any) -> ConversationEvent:
+        return self.emit(STREAM_COMPLETED, request, payload=payload)
+
+    def stream_cancelled(self, request: ConversationRequest, **payload: Any) -> ConversationEvent:
+        return self.emit(STREAM_CANCELLED, request, payload=payload)

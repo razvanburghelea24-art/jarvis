@@ -27,7 +27,7 @@ ENGINE_DIR = (
 
 def test_skeleton_flag_and_components():
     engine = ConversationEngine()
-    assert engine.SKELETON is True
+    assert engine.SKELETON is False
     assert isinstance(engine.validator, RequestValidator)
     assert isinstance(engine.context_builder, ContextBuilder)
     assert isinstance(engine.decision_engine, DecisionEngine)

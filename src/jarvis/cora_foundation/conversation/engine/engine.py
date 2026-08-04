@@ -1,4 +1,4 @@
-"""ConversationEngine — conversational motor spine.
+"""ConversationEngine — conversational motor spine (Core v1).
 
 Flow (fixed order):
   submit(request)
@@ -7,16 +7,16 @@ Flow (fixed order):
     → decide()
     → emit_state()
     → emit_response()
-    (+ ConversationEvents journal emissions)
+    (+ ConversationEvents)
+  stream(response, request)  ← optional progressive delivery (last)
 
-Produces: ConversationResponse · ConversationState · ConversationEvents
-Never: Electron · React · Persona · Avatar · Camera · IPC · UI mutation · Audit writes
-
-Streaming is LAST (not in this spine yet).
+Produces: ConversationResponse · ConversationState · ConversationEvents · Stream chunks
+Never: Electron · React · Persona · Avatar · Camera · IPC · UI · Audit · LLM · Planner
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from typing import Any, Mapping
 
 from ..contracts import (
@@ -32,23 +32,17 @@ from .decision_engine import DecisionEngine
 from .request_validator import RequestValidator
 from .response_builder import ResponseBuilder
 from .state_emitter import StateEmitter
+from .streaming import ResponseStreamer, StreamChunk, StreamResult
 from ._skeleton import SkeletonNotImplemented
 
-# Re-export for callers / tests
 __all__ = ["ConversationEngine", "SkeletonNotImplemented"]
 
 
 class ConversationEngine:
-    """
-    Conversational motor spine.
+    """Conversational motor spine — Core v1 components, no Desktop knowledge."""
 
-    Components (none know Desktop/UI):
-      RequestValidator · ContextBuilder · DecisionEngine ·
-      StateEmitter · ResponseBuilder · ConversationEvents
-    """
-
-    SKELETON = True
-    """True until Streaming lands (last Beta piece). Structural spine is otherwise complete."""
+    SKELETON = False
+    """False — Conversation Engine Core v1 structural modules are complete."""
 
     def __init__(
         self,
@@ -59,6 +53,7 @@ class ConversationEngine:
         response_builder: ResponseBuilder | None = None,
         state_emitter: StateEmitter | None = None,
         conversation_events: ConversationEvents | None = None,
+        streamer: ResponseStreamer | None = None,
     ) -> None:
         self.validator = validator or RequestValidator()
         self.context_builder = context_builder or ContextBuilder()
@@ -66,8 +61,10 @@ class ConversationEngine:
         self.response_builder = response_builder or ResponseBuilder()
         self.state_emitter = state_emitter or StateEmitter()
         self.conversation_events = conversation_events or ConversationEvents()
-
-    # ── named pipeline steps (extension points) ─────────────────────────
+        self.streamer = streamer or ResponseStreamer(
+            events=self.conversation_events,
+            state_emitter=self.state_emitter,
+        )
 
     def validate(self, request: Mapping[str, Any] | ConversationRequest) -> ConversationRequest:
         return self.validator.validate(request)
@@ -87,7 +84,6 @@ class ConversationEngine:
         request: ConversationRequest,
         decision: ConversationDecision,
     ) -> ConversationState:
-        """Publish ConversationState trail for decision; returns final state."""
         trail = self.state_emitter.emit_trail(decision, request)
         return trail[-1]
 
@@ -99,29 +95,41 @@ class ConversationEngine:
     ) -> ConversationResponse:
         return self.response_builder.build(request, context, decision)
 
-    # ── full spine ──────────────────────────────────────────────────────
+    def stream(
+        self,
+        response: ConversationResponse,
+        request: ConversationRequest,
+    ) -> Iterator[StreamChunk]:
+        """Deliver an already-built response as ordered chunks."""
+        return self.streamer.stream(response, request)
+
+    def stream_run(
+        self,
+        response: ConversationResponse,
+        request: ConversationRequest,
+    ) -> StreamResult:
+        return self.streamer.run(response, request)
+
+    def cancel_stream(self) -> None:
+        self.streamer.cancel()
 
     def submit(
         self,
         request: Mapping[str, Any] | ConversationRequest,
     ) -> ConversationResponse:
         """
-        Canonical turn pipeline.
+        Canonical turn pipeline (non-streaming).
 
         Order is frozen:
           validate → build_context → decide → emit_state → emit_response
-        ConversationEvents emissions follow each step.
-        Streaming is NOT part of this spine yet (comes last in Beta).
+        Use stream() / stream_run() after submit to deliver progressively.
         """
         ev = self.conversation_events
         validated = self.validate(request)
         ev.request_validated(validated)
 
         context = self.build_context(validated)
-        ev.context_built(
-            validated,
-            workspace_id=context.workspace_id,
-        )
+        ev.context_built(validated, workspace_id=context.workspace_id)
 
         decision = self.decide(validated, context)
         label = str(decision.tool_intent.get("label") or decision.kind.value)

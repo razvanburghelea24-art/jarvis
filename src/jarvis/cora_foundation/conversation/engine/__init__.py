@@ -1,8 +1,8 @@
-"""Conversation Engine Skeleton — structure only, no business logic.
+"""Conversation Engine — Core v1 modules.
 
 HARD RULE:
   Conversation Engine produces only:
-    ConversationResponse · ConversationState · ConversationEvents
+    ConversationResponse · ConversationState · ConversationEvents · Stream chunks
   It does NOT send IPC, change UI, or talk to Electron / React / Persona / Avatar / Camera.
 """
 
@@ -26,6 +26,10 @@ from .conversation_events import (
     REQUEST_VALIDATED,
     RESPONSE_BUILT,
     STATE_EMITTED,
+    STREAM_CANCELLED,
+    STREAM_CHUNK,
+    STREAM_COMPLETED,
+    STREAM_STARTED,
 )
 from .decision_engine import DecisionEngine
 from .engine import ConversationEngine, SkeletonNotImplemented
@@ -43,6 +47,7 @@ from .request_validator import (
 )
 from .response_builder import ResponseBuilder
 from .state_emitter import StateEmitter
+from .streaming import DEFAULT_CHUNK_SIZE, ResponseStreamer, StreamChunk, StreamResult
 
 __all__ = [
     "CONTEXT_BUILT",
@@ -51,6 +56,7 @@ __all__ = [
     "ConversationEvent",
     "ConversationEvents",
     "ContextBuilder",
+    "DEFAULT_CHUNK_SIZE",
     "DEFAULT_LIMITS",
     "DECISION_MADE",
     "DecisionEngine",
@@ -70,9 +76,16 @@ __all__ = [
     "RequestValidationResult",
     "RequestValidator",
     "ResponseBuilder",
+    "ResponseStreamer",
     "STATE_EMITTED",
+    "STREAM_CANCELLED",
+    "STREAM_CHUNK",
+    "STREAM_COMPLETED",
+    "STREAM_STARTED",
     "SkeletonNotImplemented",
     "StateEmitter",
+    "StreamChunk",
+    "StreamResult",
     "StubConversationMemoryProvider",
     "StubCoreMemoryProvider",
     "StubRuntimeSnapshotProvider",

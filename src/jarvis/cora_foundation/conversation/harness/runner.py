@@ -16,7 +16,9 @@ from ..engine import (
     EventJournal,
     RequestValidator,
     ResponseBuilder,
+    ResponseStreamer,
     StateEmitter,
+    StreamResult,
 )
 from ..events import EVENT_CONVERSATION_STATE_CHANGED, get_conversation_event_journal
 
@@ -29,6 +31,7 @@ class HarnessResult:
     states: list[ConversationState] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     conversation_events: list[dict[str, Any]] = field(default_factory=list)
+    stream: StreamResult | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -38,21 +41,15 @@ class HarnessResult:
             "states": [s.to_canonical_dict() for s in self.states],
             "errors": list(self.errors),
             "conversation_events": list(self.conversation_events),
-            # Legacy presentation timeline (ConversationStateChanged) — not ConversationEvents
+            "stream": self.stream.to_dict() if self.stream else None,
             "events": get_conversation_event_journal().to_timeline(limit=40),
         }
 
 
 class ConversationHarness:
-    """
-    Banc de test:
-      ConversationRequest → Gateway Accept → Engine(real steps) → Response
+    """Gateway Accept → Engine → optional Streaming. Journals via observers."""
 
-    ConversationEvents → EventJournal via on_event (Engine does not know listeners).
-    Legacy ConversationStateChanged timeline remains separate (presentation only).
-    """
-
-    def __init__(self, *, audit: AuditJournal | None = None) -> None:
+    def __init__(self, *, audit: AuditJournal | None = None, chunk_size: int = 8) -> None:
         self.audit = audit or AuditJournal()
         self.event_journal = EventJournal()
 
@@ -60,7 +57,6 @@ class ConversationHarness:
             self.event_journal.record(event)
 
         def _on_state(state: ConversationState) -> None:
-            # Legacy presentation timeline — separate from ConversationEvents journal
             get_conversation_event_journal().record_state(
                 presentation=state.presentation.value,
                 request_id=state.request_id,
@@ -71,6 +67,11 @@ class ConversationHarness:
 
         self.conversation_events = ConversationEvents(on_event=_on_conversation_event)
         self.emitter = StateEmitter(on_state=_on_state)
+        self.streamer = ResponseStreamer(
+            events=self.conversation_events,
+            state_emitter=self.emitter,
+            chunk_size=chunk_size,
+        )
         self.engine = ConversationEngine(
             validator=RequestValidator(),
             context_builder=ContextBuilder(),
@@ -78,8 +79,8 @@ class ConversationHarness:
             response_builder=ResponseBuilder(),
             state_emitter=self.emitter,
             conversation_events=self.conversation_events,
+            streamer=self.streamer,
         )
-        self.engine.SKELETON = True
 
     def accept(self, payload: Mapping[str, Any] | ConversationRequest | None) -> ConversationAcceptResult:
         result = accept_conversation_request(payload, audit=self.audit)
@@ -105,7 +106,7 @@ class ConversationHarness:
             previous = p
         return out
 
-    def run_turn(self, payload: Mapping[str, Any]) -> HarnessResult:
+    def run_turn(self, payload: Mapping[str, Any], *, stream: bool = False) -> HarnessResult:
         gateway = self.accept(payload)
         if not gateway.ok or gateway.request is None:
             return HarnessResult(
@@ -119,6 +120,9 @@ class ConversationHarness:
         states = self.emit_state_sequence(request, ["Idle", "Listening"])
         try:
             response = self.engine.submit(request)
+            stream_result = None
+            if stream:
+                stream_result = self.engine.stream_run(response, request)
         except Exception as exc:  # noqa: BLE001
             return HarnessResult(
                 ok=False,
@@ -134,6 +138,7 @@ class ConversationHarness:
             response=response,
             states=states,
             conversation_events=self.event_journal.to_list(),
+            stream=stream_result,
         )
 
     def timeline_has_state_changed(self, *, current_state: str | None = None) -> bool:
