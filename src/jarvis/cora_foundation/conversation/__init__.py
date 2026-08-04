@@ -92,6 +92,7 @@ from .memory import (
     reset_conversation_memory_for_tests,
 )
 from .projection import empty_conversation_section, project_conversation_state
+from .wiring import WiredConversationPipeline, WiredTurnResult, route_needs_from_context
 
 __all__ = [
     "SCHEMA_FAMILY",
@@ -170,6 +171,9 @@ __all__ = [
     "OpenQuestion",
     "get_conversation_memory",
     "reset_conversation_memory_for_tests",
+    "WiredConversationPipeline",
+    "WiredTurnResult",
+    "route_needs_from_context",
     "ConversationHarness",
     "FakeContextBuilder",
     "FakeDecisionEngine",
