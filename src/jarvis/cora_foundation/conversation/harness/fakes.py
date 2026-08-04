@@ -24,22 +24,8 @@ from ..engine.response_builder import ResponseBuilder
 from ..engine.state_emitter import StateEmitter
 from ..events import get_conversation_event_journal
 
-# Backward-compatible alias
 FakeRequestValidator = RequestValidator
-
-
-class FakeContextBuilder(ContextBuilder):
-    def build(self, request: ConversationRequest) -> ConversationContext:
-        return ConversationContext(
-            request_id=request.request_id,
-            session_id=request.session_id,
-            workspace_id=request.workspace_id,
-            conversation={"turns": 0, "harness": True},
-            workspace={"id": request.workspace_id},
-            core={"harness": True},
-            runtime={"e_stop": False},
-            sealed=True,
-        )
+FakeContextBuilder = ContextBuilder
 
 
 class FakeDecisionEngine(DecisionEngine):

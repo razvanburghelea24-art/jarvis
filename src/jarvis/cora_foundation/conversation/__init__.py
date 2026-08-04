@@ -26,6 +26,7 @@ from .contracts import (
 from .engine import (
     ConversationEngine,
     ContextBuilder,
+    DEFAULT_LIMITS,
     DecisionEngine,
     ERROR_INVALID_JSON,
     ERROR_INVALID_REQUEST,
@@ -40,6 +41,10 @@ from .engine import (
     ResponseBuilder,
     SkeletonNotImplemented,
     StateEmitter,
+    StubConversationMemoryProvider,
+    StubCoreMemoryProvider,
+    StubRuntimeSnapshotProvider,
+    StubWorkspaceProvider,
 )
 from .events import (
     EVENT_CONVERSATION_STATE_CHANGED,
@@ -90,6 +95,7 @@ __all__ = [
     "reset_conversation_event_journal_for_tests",
     "ConversationEngine",
     "ContextBuilder",
+    "DEFAULT_LIMITS",
     "DecisionEngine",
     "ERROR_INVALID_JSON",
     "ERROR_INVALID_REQUEST",
@@ -104,6 +110,10 @@ __all__ = [
     "ResponseBuilder",
     "SkeletonNotImplemented",
     "StateEmitter",
+    "StubConversationMemoryProvider",
+    "StubCoreMemoryProvider",
+    "StubRuntimeSnapshotProvider",
+    "StubWorkspaceProvider",
     "ConversationHarness",
     "FakeContextBuilder",
     "FakeDecisionEngine",
