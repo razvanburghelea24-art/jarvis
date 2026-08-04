@@ -46,17 +46,23 @@ def test_pipeline_methods_exist():
 
 def test_each_step_raises_skeleton_not_implemented():
     engine = ConversationEngine()
-    with pytest.raises(SkeletonNotImplemented, match="RequestValidator"):
-        engine.validate({"request_id": "r", "session_id": "s", "workspace_id": "w", "input": "x"})
-
-    # submit stops at first step
-    with pytest.raises(SkeletonNotImplemented, match="RequestValidator"):
-        engine.submit({"request_id": "r", "session_id": "s", "workspace_id": "w", "input": "x"})
+    # RequestValidator is implemented — remaining stubs still raise
+    req = {
+        "request_id": "r",
+        "session_id": "s",
+        "workspace_id": "w",
+        "input": "x",
+    }
+    validated = engine.validate(req)
+    assert validated.request_id == "r"
+    with pytest.raises(SkeletonNotImplemented, match="ContextBuilder"):
+        engine.build_context(validated)
+    with pytest.raises(SkeletonNotImplemented, match="ContextBuilder"):
+        engine.submit(req)
 
 
 def test_component_methods_are_stubs():
     stubs = [
-        (RequestValidator().validate, ("x",)),
         (ContextBuilder().build, ("x",)),
         (DecisionEngine().decide, ("x", "y")),
         (ResponseBuilder().build, ("x", "y", "z")),

@@ -8,12 +8,11 @@ from typing import Any, Mapping
 from ...gateway.audit_hooks import AuditJournal
 from ...gateway.conversation_accept import ConversationAcceptResult, accept_conversation_request
 from ..contracts import ConversationRequest, ConversationResponse, ConversationState
-from ..engine import ConversationEngine
+from ..engine import ConversationEngine, RequestValidator
 from ..events import EVENT_CONVERSATION_STATE_CHANGED, get_conversation_event_journal
 from .fakes import (
     FakeContextBuilder,
     FakeDecisionEngine,
-    FakeRequestValidator,
     FakeResponseBuilder,
     FakeStateEmitter,
 )
@@ -50,13 +49,13 @@ class ConversationHarness:
         self.audit = audit or AuditJournal()
         self.emitter = FakeStateEmitter()
         self.engine = ConversationEngine(
-            validator=FakeRequestValidator(),
+            validator=RequestValidator(),
             context_builder=FakeContextBuilder(),
             decision_engine=FakeDecisionEngine(),
             response_builder=FakeResponseBuilder(),
             state_emitter=self.emitter,
         )
-        # Harness engine uses fakes — still conceptually a skeleton spine.
+        # Real RequestValidator; remaining spine steps still harness fakes.
         self.engine.SKELETON = True
 
     def accept(self, payload: Mapping[str, Any] | ConversationRequest | None) -> ConversationAcceptResult:

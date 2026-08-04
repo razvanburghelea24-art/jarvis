@@ -1,8 +1,10 @@
-"""Harness-only fakes — contract-shaped stubs, zero product intelligence."""
+"""Harness fakes for not-yet-implemented spine steps.
+
+RequestValidator is real — harness injects it directly (see runner.py).
+"""
 
 from __future__ import annotations
 
-from typing import Any, Mapping
 from uuid import uuid4
 
 from ..contracts import (
@@ -14,7 +16,6 @@ from ..contracts import (
     DecisionKind,
     LifecyclePhase,
     PresentationHint,
-    validate_request,
 )
 from ..engine.context_builder import ContextBuilder
 from ..engine.decision_engine import DecisionEngine
@@ -23,23 +24,8 @@ from ..engine.response_builder import ResponseBuilder
 from ..engine.state_emitter import StateEmitter
 from ..events import get_conversation_event_journal
 
-
-class FakeRequestValidator(RequestValidator):
-    """Uses real schema validation — proves contracts speak to the spine."""
-
-    def validate(self, request: Mapping[str, Any] | ConversationRequest) -> ConversationRequest:
-        if isinstance(request, ConversationRequest):
-            raw = request.to_canonical_dict()
-        else:
-            raw = dict(request)
-            if "schema_family" not in raw:
-                raw = {
-                    "schema_family": "cora.conversation.contracts",
-                    "schema_version": 1,
-                    "kind": "ConversationRequest",
-                    **raw,
-                }
-        return validate_request(raw)
+# Backward-compatible alias
+FakeRequestValidator = RequestValidator
 
 
 class FakeContextBuilder(ContextBuilder):
@@ -74,8 +60,6 @@ class FakeDecisionEngine(DecisionEngine):
 
 
 class FakeResponseBuilder(ResponseBuilder):
-    """Empty ConversationResponse — DoD Test 4."""
-
     def build(
         self,
         request: ConversationRequest,
@@ -95,8 +79,6 @@ class FakeResponseBuilder(ResponseBuilder):
 
 
 class FakeStateEmitter(StateEmitter):
-    """Emits ConversationState + ConversationStateChanged (no Desktop)."""
-
     def emit(
         self,
         request: ConversationRequest,
