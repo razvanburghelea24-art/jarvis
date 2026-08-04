@@ -19,6 +19,7 @@ from ...llm import (
     routing_test_registry,
 )
 from ...llm.from_context import DEFAULT_SYSTEM
+from ...dispatcher import Dispatcher, DispatchResult
 from ...planner import PlannerDecision, PlannerRouter
 from ...tool_routing import ToolPlan, ToolRouter
 from ...workspace import WorkspaceEngine, WorkspaceEngineProvider
@@ -59,6 +60,7 @@ class WiredTurnResult:
     decision: ConversationDecision | None = None
     planner: PlannerDecision | None = None
     tool_plan: ToolPlan | None = None
+    dispatch: DispatchResult | None = None
     route: RouteDecision | None = None
     llm: LLMResponse | None = None
     response: ConversationResponse | None = None
@@ -76,6 +78,7 @@ class WiredTurnResult:
             ),
             "planner": self.planner.to_canonical_dict() if self.planner else None,
             "tool_plan": self.tool_plan.to_canonical_dict() if self.tool_plan else None,
+            "dispatch": self.dispatch.to_canonical_dict() if self.dispatch else None,
             "route": self.route.to_dict() if self.route else None,
             "llm_provider": self.llm.provider if self.llm else None,
             "response": self.response.to_canonical_dict() if self.response else None,
@@ -111,6 +114,8 @@ class WiredConversationPipeline:
         event_journal: EventJournal | None = None,
         planner_router: PlannerRouter | None = None,
         tool_router: ToolRouter | None = None,
+        dispatcher: Dispatcher | None = None,
+        approval_granted: bool = False,
         chunk_size: int = 24,
     ) -> None:
         self.memory = memory or get_conversation_memory()
@@ -121,6 +126,8 @@ class WiredConversationPipeline:
         self.response_builder = response_builder or ResponseBuilder()
         self.planner_router = planner_router or PlannerRouter()
         self.tool_router = tool_router or ToolRouter()
+        self.dispatcher = dispatcher or Dispatcher()
+        self.approval_granted = approval_granted
         self.event_journal = event_journal or EventJournal()
 
         def _on_event(event) -> None:
@@ -189,6 +196,9 @@ class WiredConversationPipeline:
             request, context, decision, workspace=self.workspace
         )
         tool_plan = self.tool_router.route(planner, request)
+        dispatch = self.dispatcher.dispatch(
+            tool_plan, approval_granted=self.approval_granted
+        )
 
         route: RouteDecision | None = None
         llm: LLMResponse | None = None
@@ -208,6 +218,8 @@ class WiredConversationPipeline:
                     "planner_route": planner.route.value,
                     "tool_plan_empty": tool_plan.empty,
                     "tool_approval_required": tool_plan.approval_required,
+                    "dispatch_outcome": dispatch.outcome.value,
+                    "dispatch_request_count": len(dispatch.requests),
                 },
             )
             adapter = self.router.registry.get(route.provider_id).adapter
@@ -261,6 +273,7 @@ class WiredConversationPipeline:
             decision=decision,
             planner=planner,
             tool_plan=tool_plan,
+            dispatch=dispatch,
             route=route,
             llm=llm,
             response=response,

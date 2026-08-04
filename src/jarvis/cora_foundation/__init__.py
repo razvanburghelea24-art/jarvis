@@ -4,6 +4,7 @@ from . import agents
 from . import audit
 from . import computer_operator
 from . import conversation
+from . import dispatcher
 from . import emergency_stop
 from . import gateway
 from . import identity
@@ -21,6 +22,7 @@ __all__ = [
     "audit",
     "computer_operator",
     "conversation",
+    "dispatcher",
     "emergency_stop",
     "gateway",
     "identity",
