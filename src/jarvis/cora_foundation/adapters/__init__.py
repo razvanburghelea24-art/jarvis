@@ -10,7 +10,12 @@ from .discord import (
     MockDiscordTransport,
     execute_discord_gated,
 )
-from .framework import FrameworkAdapter, MockFrameworkTransport
+from .framework import (
+    FrameworkAdapter,
+    LiveFrameworkTransport,
+    MockFrameworkTransport,
+    execute_framework_gated,
+)
 from .github import (
     GitHubAdapter,
     LiveGitHubTransport,
@@ -28,6 +33,7 @@ __all__ = [
     "FrameworkAdapter",
     "GitHubAdapter",
     "LiveDiscordTransport",
+    "LiveFrameworkTransport",
     "LiveGitHubTransport",
     "MockDiscordTransport",
     "MockFrameworkTransport",
@@ -37,5 +43,6 @@ __all__ = [
     "N8NAdapter",
     "RailwayAdapter",
     "execute_discord_gated",
+    "execute_framework_gated",
     "execute_github_gated",
 ]
