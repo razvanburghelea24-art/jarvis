@@ -17,6 +17,7 @@ from . import snapshot
 from . import tool_routing
 from . import workspace
 from . import adapters  # after dispatcher/conversation — avoid circular import
+from . import live_gateway
 
 __all__ = [
     "agents",
@@ -36,4 +37,5 @@ __all__ = [
     "tool_routing",
     "workspace",
     "adapters",
+    "live_gateway",
 ]
