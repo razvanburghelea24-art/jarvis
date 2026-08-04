@@ -16,6 +16,7 @@ from . import planner
 from . import snapshot
 from . import tool_routing
 from . import workspace
+from . import adapters  # after dispatcher/conversation — avoid circular import
 
 __all__ = [
     "agents",
@@ -34,4 +35,5 @@ __all__ = [
     "snapshot",
     "tool_routing",
     "workspace",
+    "adapters",
 ]
