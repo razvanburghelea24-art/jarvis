@@ -20,6 +20,8 @@ from src.jarvis.cora_foundation.conversation import (
     STREAM_CANCELLED,
     STREAM_CHUNK,
     STREAM_COMPLETED,
+    STREAM_INTERRUPTED,
+    STREAM_RESUMED,
     STREAM_STARTED,
     reset_conversation_event_journal_for_tests,
 )
@@ -123,6 +125,60 @@ def test_cancel_mid_stream():
     assert STREAM_CHUNK in types
     assert STREAM_CANCELLED in types
     assert STREAM_COMPLETED not in types
+
+
+def test_interrupt_parks_and_resume_continues():
+    journal = EventJournal()
+    bus = ConversationEvents(on_event=journal.record)
+    streamer = ResponseStreamer(events=bus, chunk_size=4)
+    req = _req(request_id="req-barge")
+    text = "abcdefghij"
+    gen = streamer.stream(_resp(text), req)
+    first = next(gen)
+    assert first.text == "abcd"
+    streamer.interrupt()
+    rest = list(gen)
+    assert rest == []
+    assert streamer.parked is not None
+    assert streamer.parked.remaining_text == "efghij"
+    types = journal.types(request_id=req.request_id)
+    assert STREAM_INTERRUPTED in types
+    assert STREAM_CANCELLED not in types
+    assert STREAM_COMPLETED not in types
+
+    resumed = streamer.run_resume(req)
+    assert resumed.resumed is True
+    assert resumed.completed is True
+    assert "".join(c.text for c in resumed.chunks) == "efghij"
+    types2 = journal.types(request_id=req.request_id)
+    assert STREAM_RESUMED in types2
+    assert STREAM_COMPLETED in types2
+
+
+def test_cancel_does_not_park():
+    streamer = ResponseStreamer(chunk_size=4)
+    req = _req()
+    gen = streamer.stream(_resp("abcdefghij"), req)
+    next(gen)
+    streamer.cancel()
+    list(gen)
+    assert streamer.parked is None
+
+
+def test_engine_barge_in_api():
+    engine = ConversationEngine()
+    req = _req(request_id="req-eng-barge")
+    resp = engine.submit(req)
+    # Force a long response for chunking by streaming the built text
+    long = _resp((resp.text or "x") * 20, response_id=resp.response_id)
+    gen = engine.stream(long, req)
+    next(gen)
+    engine.interrupt_stream()
+    assert list(gen) == []
+    assert engine.streamer.parked is not None
+    result = engine.resume_stream_run(req)
+    assert result.resumed is True
+    assert result.completed is True
 
 
 def test_chunk_serialization():

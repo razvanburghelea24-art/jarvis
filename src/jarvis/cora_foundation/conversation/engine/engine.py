@@ -111,7 +111,24 @@ class ConversationEngine:
         return self.streamer.run(response, request)
 
     def cancel_stream(self) -> None:
+        """Hard abort current stream (no park / no resume)."""
         self.streamer.cancel()
+
+    def interrupt_stream(self) -> None:
+        """Barge-in — park remainder for resume_stream()."""
+        self.streamer.interrupt()
+
+    def resume_stream(
+        self,
+        request: ConversationRequest | None = None,
+    ) -> Iterator[StreamChunk]:
+        return self.streamer.resume(request)
+
+    def resume_stream_run(
+        self,
+        request: ConversationRequest | None = None,
+    ) -> StreamResult:
+        return self.streamer.run_resume(request)
 
     def submit(
         self,
