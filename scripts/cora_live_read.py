@@ -3,6 +3,7 @@
 Whitelist ops only. Never writes. Token never printed.
 Usage:
   python scripts/cora_live_read.py '{"adapter":"github","op":"read_repo","payload":{"repo":"owner/repo"}}'
+  python scripts/cora_live_read.py '{"adapter":"n8n","op":"list_workflows","payload":{}}'
   echo '{...}' | python scripts/cora_live_read.py
 """
 
@@ -23,6 +24,9 @@ from src.jarvis.cora_foundation.adapters.discord.live_transport import LiveDisco
 from src.jarvis.cora_foundation.adapters.discord.path import execute_discord_gated
 from src.jarvis.cora_foundation.adapters.github.live_transport import LiveGitHubTransport
 from src.jarvis.cora_foundation.adapters.github.path import execute_github_gated
+from src.jarvis.cora_foundation.adapters.n8n.flags import n8n_api_base
+from src.jarvis.cora_foundation.adapters.n8n.live_transport import LiveN8NTransport
+from src.jarvis.cora_foundation.adapters.n8n.path import execute_n8n_gated
 from src.jarvis.cora_foundation.dispatcher import (
     ApprovalState,
     DispatchExecutionMode,
@@ -36,6 +40,15 @@ from src.jarvis.cora_foundation.live_gateway import (
 
 GITHUB_OPS = frozenset({"read_repo", "list_branches", "read_pr"})
 DISCORD_OPS = frozenset({"list_channels", "read_channel", "read_message"})
+N8N_OPS = frozenset(
+    {
+        "list_workflows",
+        "workflow_status",
+        "workflow_info",
+        "execution_status",
+        "execution_logs",
+    }
+)
 
 TOOL = {
     "read_repo": "GitHub.read_repo",
@@ -44,6 +57,17 @@ TOOL = {
     "list_channels": "Discord.list_channels",
     "read_channel": "Discord.read_channel",
     "read_message": "Discord.read_message",
+    "list_workflows": "n8n.list_workflows",
+    "workflow_status": "n8n.workflow_status",
+    "workflow_info": "n8n.workflow_info",
+    "execution_status": "n8n.execution_status",
+    "execution_logs": "n8n.execution_logs",
+}
+
+CAPABILITY = {
+    "github": "github.read",
+    "discord": "discord.read",
+    "n8n": "n8n.read",
 }
 
 
@@ -70,11 +94,66 @@ def _slim_data(adapter: str, op: str, data: Any) -> Any:
     if adapter == "discord" and op == "read_channel":
         keys = ("id", "name", "type", "guild_id", "live")
         return {k: data[k] for k in keys if k in data}
+    if adapter == "n8n" and op == "list_workflows":
+        items = data.get("data") or data.get("items") or data.get("workflows") or []
+        if isinstance(data.get("data"), dict) and isinstance(data["data"].get("workflows"), list):
+            items = data["data"]["workflows"]
+        slim = []
+        for w in items[:40]:
+            if not isinstance(w, dict):
+                continue
+            slim.append(
+                {
+                    "id": w.get("id"),
+                    "name": w.get("name"),
+                    "active": w.get("active"),
+                    "updatedAt": w.get("updatedAt") or w.get("updated_at"),
+                }
+            )
+        return {"workflows": slim, "count": len(items), "live": data.get("live")}
+    if adapter == "n8n" and op in {"workflow_status", "workflow_info"}:
+        keys = ("id", "name", "active", "createdAt", "updatedAt", "live", "operation")
+        out = {k: data[k] for k in keys if k in data}
+        if "data" in data and isinstance(data["data"], dict):
+            inner = data["data"]
+            for k in ("id", "name", "active", "createdAt", "updatedAt"):
+                if k in inner and k not in out:
+                    out[k] = inner[k]
+        return out
+    if adapter == "n8n" and op in {"execution_status", "execution_logs"}:
+        items = data.get("data") or data.get("items") or data.get("results") or []
+        if isinstance(items, list):
+            slim = []
+            for ex in items[:15]:
+                if not isinstance(ex, dict):
+                    continue
+                slim.append(
+                    {
+                        "id": ex.get("id"),
+                        "workflowId": ex.get("workflowId") or ex.get("workflow_id"),
+                        "status": ex.get("status") or ex.get("finished"),
+                        "mode": ex.get("mode"),
+                        "startedAt": ex.get("startedAt") or ex.get("started_at"),
+                        "stoppedAt": ex.get("stoppedAt") or ex.get("stopped_at"),
+                    }
+                )
+            return {"executions": slim, "count": len(items), "live": data.get("live")}
+        keys = (
+            "id",
+            "workflowId",
+            "status",
+            "mode",
+            "startedAt",
+            "stoppedAt",
+            "finished",
+            "live",
+            "operation",
+        )
+        return {k: data[k] for k in keys if k in data}
     return data
 
 
 def _out(payload: dict[str, Any], code: int = 0) -> int:
-    # Windows consoles (cp1250/cp1252) blow up on Discord channel names — force UTF-8.
     try:
         sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
     except Exception:
@@ -136,6 +215,28 @@ def _token_discord() -> tuple[str, str]:
     )
 
 
+def _token_n8n() -> tuple[str, str]:
+    tok = (
+        os.environ.get("CORA_N8N_TOKEN", "").strip()
+        or os.environ.get("N8N_API_KEY", "").strip()
+    )
+    base = (
+        os.environ.get("CORA_N8N_API_BASE", "").strip()
+        or os.environ.get("OWNER_BRIEF_N8N_BASE", "").strip()
+        or "https://nymodsbot.app.n8n.cloud/api/v1"
+    )
+    if tok:
+        return tok, base.rstrip("/")
+    vars_ = _railway_vars()
+    tok = str(vars_.get("N8N_API_KEY") or vars_.get("CORA_N8N_TOKEN") or "").strip()
+    base = (
+        str(vars_.get("CORA_N8N_API_BASE") or vars_.get("N8N_API_BASE") or base)
+        .strip()
+        .rstrip("/")
+    )
+    return tok, base
+
+
 def _req(tool: str, capability: str, payload: dict[str, Any]) -> DispatchRequest:
     return DispatchRequest(
         dispatch_id=DispatchRequest.new_id(),
@@ -192,7 +293,7 @@ def main() -> int:
         audits: list = []
         transport = LiveGitHubTransport(token=tok, phase=1)
         result = execute_github_gated(
-            _req(TOOL[op], "github.read", dict(payload)),
+            _req(TOOL[op], CAPABILITY["github"], dict(payload)),
             _ctx(),
             gateway=LiveExecutionGateway(on_audit=lambda d: audits.append(d.reason) or True),
             transport=transport,
@@ -212,14 +313,38 @@ def main() -> int:
         audits = []
         transport = LiveDiscordTransport(token=tok, phase=1)
         result = execute_discord_gated(
-            _req(TOOL[op], "discord.read", pl),
+            _req(TOOL[op], CAPABILITY["discord"], pl),
+            _ctx(),
+            gateway=LiveExecutionGateway(on_audit=lambda d: audits.append(d.reason) or True),
+            transport=transport,
+        )
+    elif adapter == "n8n":
+        if op not in N8N_OPS:
+            return _out(
+                {"ok": False, "error": "OP_NOT_ALLOWED", "allowed": sorted(N8N_OPS)},
+                3,
+            )
+        tok, api_base = _token_n8n()
+        if not tok:
+            return _out({"ok": False, "error": "N8N_TOKEN_MISSING"}, 4)
+        os.environ.setdefault("CORA_N8N_API_BASE", api_base)
+        audits = []
+        transport = LiveN8NTransport(
+            token=tok, phase=1, api_base=api_base or n8n_api_base()
+        )
+        result = execute_n8n_gated(
+            _req(TOOL[op], CAPABILITY["n8n"], dict(payload)),
             _ctx(),
             gateway=LiveExecutionGateway(on_audit=lambda d: audits.append(d.reason) or True),
             transport=transport,
         )
     else:
         return _out(
-            {"ok": False, "error": "ADAPTER_NOT_ALLOWED", "allowed": ["github", "discord"]},
+            {
+                "ok": False,
+                "error": "ADAPTER_NOT_ALLOWED",
+                "allowed": ["github", "discord", "n8n"],
+            },
             3,
         )
 
@@ -238,7 +363,9 @@ def main() -> int:
 
     return _out(
         {
-            "ok": result.allowed and result.adapter is not None and result.adapter.error is None,
+            "ok": result.allowed
+            and result.adapter is not None
+            and result.adapter.error is None,
             "adapter": adapter,
             "op": op,
             "phase": 1,
