@@ -45,6 +45,7 @@ N8N_OPS = frozenset(
         "list_workflows",
         "workflow_status",
         "workflow_info",
+        "inspect_workflow",
         "execution_status",
         "execution_logs",
     }
@@ -60,6 +61,7 @@ TOOL = {
     "list_workflows": "n8n.list_workflows",
     "workflow_status": "n8n.workflow_status",
     "workflow_info": "n8n.workflow_info",
+    "inspect_workflow": "n8n.workflow_info",
     "execution_status": "n8n.execution_status",
     "execution_logs": "n8n.execution_logs",
 }
@@ -111,15 +113,13 @@ def _slim_data(adapter: str, op: str, data: Any) -> Any:
                 }
             )
         return {"workflows": slim, "count": len(items), "live": data.get("live")}
-    if adapter == "n8n" and op in {"workflow_status", "workflow_info"}:
-        keys = ("id", "name", "active", "createdAt", "updatedAt", "live", "operation")
-        out = {k: data[k] for k in keys if k in data}
-        if "data" in data and isinstance(data["data"], dict):
-            inner = data["data"]
-            for k in ("id", "name", "active", "createdAt", "updatedAt"):
-                if k in inner and k not in out:
-                    out[k] = inner[k]
-        return out
+    if adapter == "n8n" and op in {"workflow_status", "workflow_info", "inspect_workflow"}:
+        wf = data
+        if isinstance(data.get("data"), dict) and (
+            "nodes" in data["data"] or "name" in data["data"]
+        ):
+            wf = {**data, **data["data"]}
+        return _workflow_intelligence(wf)
     if adapter == "n8n" and op in {"execution_status", "execution_logs"}:
         items = data.get("data") or data.get("items") or data.get("results") or []
         if isinstance(items, list):
@@ -151,6 +151,156 @@ def _slim_data(adapter: str, op: str, data: Any) -> Any:
         )
         return {k: data[k] for k in keys if k in data}
     return data
+
+
+_TRIGGER_HINTS = (
+    "webhook",
+    "cron",
+    "schedule",
+    "manualtrigger",
+    "interval",
+    "emailtrigger",
+    "chattrigger",
+)
+
+
+def _node_service(node_type: str) -> str | None:
+    t = (node_type or "").lower()
+    for key, label in (
+        ("github", "GitHub"),
+        ("discord", "Discord"),
+        ("slack", "Slack"),
+        ("openai", "OpenAI"),
+        ("http", "HTTP"),
+        ("railway", "Railway"),
+        ("postgres", "Postgres"),
+        ("mysql", "MySQL"),
+        ("redis", "Redis"),
+        ("webhook", "Webhook"),
+    ):
+        if key in t:
+            return label
+    return None
+
+
+def _approx_chain(nodes: list[dict[str, Any]], connections: dict[str, Any]) -> list[str]:
+    by_name = {
+        str(n.get("name") or ""): n for n in nodes if isinstance(n, dict) and n.get("name")
+    }
+    # Build adjacency from connections: { fromName: { main: [[{node, type, index}]] } }
+    outs: dict[str, list[str]] = {}
+    for src, buckets in (connections or {}).items():
+        if not isinstance(buckets, dict):
+            continue
+        dests: list[str] = []
+        for _port, groups in buckets.items():
+            if not isinstance(groups, list):
+                continue
+            for group in groups:
+                if not isinstance(group, list):
+                    continue
+                for edge in group:
+                    if isinstance(edge, dict) and edge.get("node"):
+                        dests.append(str(edge["node"]))
+        if dests:
+            outs[str(src)] = dests
+
+    starts = []
+    for n in nodes:
+        if not isinstance(n, dict):
+            continue
+        ntype = str(n.get("type") or "").lower()
+        if any(h in ntype for h in _TRIGGER_HINTS):
+            starts.append(str(n.get("name") or ntype))
+    if not starts and nodes:
+        starts = [str(nodes[0].get("name") or "start")]
+
+    chain: list[str] = []
+    seen: set[str] = set()
+    queue = list(starts)
+    while queue and len(chain) < 24:
+        cur = queue.pop(0)
+        if cur in seen:
+            continue
+        seen.add(cur)
+        node = by_name.get(cur)
+        label = cur
+        if node:
+            short = str(node.get("type") or "").split(".")[-1]
+            label = f"{cur} ({short})" if short else cur
+        chain.append(label)
+        for nxt in outs.get(cur, []):
+            if nxt not in seen:
+                queue.append(nxt)
+    return chain
+
+
+def _workflow_intelligence(wf: dict[str, Any]) -> dict[str, Any]:
+    """Summarize real n8n definition — not name-guess."""
+    nodes_raw = wf.get("nodes") if isinstance(wf.get("nodes"), list) else []
+    connections = wf.get("connections") if isinstance(wf.get("connections"), dict) else {}
+    settings = wf.get("settings") if isinstance(wf.get("settings"), dict) else {}
+    meta = wf.get("meta") if isinstance(wf.get("meta"), dict) else {}
+
+    nodes_slim = []
+    triggers = []
+    external: list[str] = []
+    for n in nodes_raw[:60]:
+        if not isinstance(n, dict):
+            continue
+        name = str(n.get("name") or "node")
+        ntype = str(n.get("type") or "")
+        nodes_slim.append({"name": name, "type": ntype})
+        if any(h in ntype.lower() for h in _TRIGGER_HINTS):
+            triggers.append({"name": name, "type": ntype})
+        svc = _node_service(ntype)
+        if svc and svc not in external:
+            external.append(svc)
+
+    return {
+        "id": wf.get("id"),
+        "name": wf.get("name"),
+        "active": wf.get("active"),
+        "updatedAt": wf.get("updatedAt") or wf.get("updated_at"),
+        "live": wf.get("live", True),
+        "source": "definition",
+        "description": settings.get("notes") or meta.get("description"),
+        "triggers": triggers,
+        "nodes": nodes_slim,
+        "node_count": len(nodes_raw),
+        "chain": _approx_chain(
+            [n for n in nodes_raw if isinstance(n, dict)], connections
+        ),
+        "external": external,
+        "operation": "inspect_workflow",
+    }
+
+
+def _match_workflow_id(items: list[Any], query: str) -> str | None:
+    q = (query or "").strip().lower()
+    if not q:
+        return None
+    scored: list[tuple[int, str]] = []
+    for w in items:
+        if not isinstance(w, dict):
+            continue
+        name = str(w.get("name") or "")
+        wid = str(w.get("id") or "")
+        nl = name.lower()
+        score = 0
+        if nl == q:
+            score = 100
+        elif q in nl:
+            score = 80
+        else:
+            tokens = [t for t in q.replace("—", " ").replace("-", " ").split() if len(t) > 2]
+            hits = sum(1 for t in tokens if t in nl)
+            if hits:
+                score = 40 + hits * 10
+        if score:
+            scored.append((score, wid))
+    scored.sort(key=lambda x: -x[0])
+    return scored[0][1] if scored else None
 
 
 def _out(payload: dict[str, Any], code: int = 0) -> int:
@@ -332,8 +482,50 @@ def main() -> int:
         transport = LiveN8NTransport(
             token=tok, phase=1, api_base=api_base or n8n_api_base()
         )
+        pl = dict(payload)
+        # Resolve name → id for inspect / info / status
+        if op in {"inspect_workflow", "workflow_info", "workflow_status"} and not str(
+            pl.get("workflow_id") or ""
+        ).strip():
+            q = str(
+                pl.get("name_query")
+                or pl.get("name")
+                or pl.get("query")
+                or pl.get("workflow_name")
+                or ""
+            ).strip()
+            if q:
+                listed = transport.list_workflows(payload={})
+                items: list[Any] = []
+                if listed.ok and isinstance(listed.data, dict):
+                    raw_items = (
+                        listed.data.get("data")
+                        or listed.data.get("items")
+                        or listed.data.get("workflows")
+                        or []
+                    )
+                    if isinstance(listed.data.get("data"), dict):
+                        inner = listed.data["data"]
+                        if isinstance(inner.get("workflows"), list):
+                            raw_items = inner["workflows"]
+                    if isinstance(raw_items, list):
+                        items = raw_items
+                wid = _match_workflow_id(items, q)
+                if not wid:
+                    return _out(
+                        {
+                            "ok": False,
+                            "error": "WORKFLOW_NOT_FOUND",
+                            "query": q,
+                            "write": False,
+                        },
+                        5,
+                    )
+                pl["workflow_id"] = wid
+        # inspect_workflow uses same READ tool as workflow_info
+        tool_key = "workflow_info" if op == "inspect_workflow" else op
         result = execute_n8n_gated(
-            _req(TOOL[op], CAPABILITY["n8n"], dict(payload)),
+            _req(TOOL[tool_key], CAPABILITY["n8n"], pl),
             _ctx(),
             gateway=LiveExecutionGateway(on_audit=lambda d: audits.append(d.reason) or True),
             transport=transport,
